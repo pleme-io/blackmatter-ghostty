@@ -235,9 +235,12 @@ in {
   };
 
   config = mkIf cfg.enable (mkMerge [
-    # Install ghostty package (only on Linux - macOS users install manually)
+    # Install ghostty package
     (mkIf pkgs.stdenv.isLinux {
       home.packages = [pkgs.ghostty];
+    })
+    (mkIf pkgs.stdenv.isDarwin {
+      home.packages = [pkgs.ghostty-bin];
     })
 
     # Configure ghostty with Nord theme on Linux using home-manager module
