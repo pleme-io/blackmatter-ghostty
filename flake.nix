@@ -66,9 +66,14 @@
           type = lib.types.listOf lib.types.package;
           default = [];
         };
+        options.home.homeDirectory = lib.mkOption {
+          type = lib.types.str;
+          default = "/home/test";
+        };
         options.home.file = lib.mkOption {
           type = lib.types.attrsOf (lib.types.submodule {
             options.text = lib.mkOption { type = lib.types.str; default = ""; };
+            options.source = lib.mkOption { type = lib.types.path; default = ./.; };
           });
           default = {};
         };
@@ -76,6 +81,7 @@
           type = lib.types.submodule {
             options.enable = lib.mkOption { type = lib.types.bool; default = false; };
             options.settings = lib.mkOption { type = lib.types.anything; default = {}; };
+            options.extraConfig = lib.mkOption { type = lib.types.str; default = ""; };
           };
           default = {};
         };
@@ -193,6 +199,50 @@
           '') + ''
             touch $out
           '');
+
+          # Verify shader-enabled module evaluates correctly
+          module-shaders = let
+            shaderEval = lib.evalModules {
+              modules = [
+                ./module
+                (mkHmStubs pkgs)
+                ({ ... }: {
+                  config.blackmatter.components.ghostty = {
+                    enable = true;
+                    shaders.enable = true;
+                  };
+                })
+              ];
+            };
+          in pkgs.runCommand "ghostty-module-shaders" {} ''
+            echo "Shaders enabled: ${builtins.toJSON shaderEval.config.blackmatter.components.ghostty.shaders.enable}"
+            echo "Bloom: ${builtins.toJSON shaderEval.config.blackmatter.components.ghostty.shaders.bloom}"
+            echo "Cursor trail: ${builtins.toJSON shaderEval.config.blackmatter.components.ghostty.shaders.cursorTrail}"
+            echo "Animation: ${builtins.toJSON shaderEval.config.blackmatter.components.ghostty.shaders.animation}"
+            touch $out
+          '';
+
+          # Verify keybindings module evaluates correctly
+          module-keybindings = let
+            kbEval = lib.evalModules {
+              modules = [
+                ./module
+                (mkHmStubs pkgs)
+                ({ ... }: {
+                  config.blackmatter.components.ghostty = {
+                    enable = true;
+                    keybindings.enable = true;
+                  };
+                })
+              ];
+            };
+          in pkgs.runCommand "ghostty-module-keybindings" {} ''
+            echo "Keybindings enabled: ${builtins.toJSON kbEval.config.blackmatter.components.ghostty.keybindings.enable}"
+            echo "Prompt nav: ${builtins.toJSON kbEval.config.blackmatter.components.ghostty.keybindings.promptNavigation}"
+            echo "Split management: ${builtins.toJSON kbEval.config.blackmatter.components.ghostty.keybindings.splitManagement}"
+            echo "Quick terminal: ${builtins.toJSON kbEval.config.blackmatter.components.ghostty.keybindings.quickTerminal}"
+            touch $out
+          '';
 
           # Verify the useSourceBuild option evaluates on Darwin
         } // lib.optionalAttrs (isDarwin system) {

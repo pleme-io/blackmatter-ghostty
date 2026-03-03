@@ -31,6 +31,34 @@ with lib; let
     nord14 = colors.aurora.green;
     nord15 = colors.aurora.purple;
   };
+
+  # ── Derived shader values ────────────────────────────────────────
+  builtinShaders =
+    (lib.optional cfg.shaders.bloom ./shaders/bloom.glsl)
+    ++ (lib.optional cfg.shaders.cursorTrail ./shaders/cursor-trail.glsl);
+
+  allShaderPaths = builtinShaders ++ cfg.shaders.custom;
+
+  # ── Derived keybinding values ────────────────────────────────────
+  promptNavBinds = lib.optionals cfg.keybindings.promptNavigation [
+    "cmd+up=jump_to_prompt:-1"
+    "cmd+down=jump_to_prompt:1"
+  ];
+
+  splitBinds = lib.optionals cfg.keybindings.splitManagement [
+    "ctrl+shift+up=resize_split:up,10"
+    "ctrl+shift+down=resize_split:down,10"
+    "ctrl+shift+left=resize_split:left,10"
+    "ctrl+shift+right=resize_split:right,10"
+    "cmd+shift+enter=toggle_split_zoom"
+    "cmd+shift+e=equalize_splits"
+  ];
+
+  quickTermBinds = lib.optionals cfg.keybindings.quickTerminal [
+    "global:cmd+grave_accent=toggle_quick_terminal"
+  ];
+
+  allKeybinds = promptNavBinds ++ splitBinds ++ quickTermBinds ++ cfg.keybindings.custom;
 in {
   options.blackmatter.components.ghostty = {
     enable = mkEnableOption "Ghostty terminal emulator";
@@ -117,6 +145,24 @@ in {
         type = types.str;
         default = "srgb";
         description = "Window colorspace (srgb or display-p3 for macOS wider gamut)";
+      };
+
+      macosTitlebarStyle = mkOption {
+        type = types.enum ["native" "transparent" "tabs"];
+        default = "transparent";
+        description = "macOS titlebar style";
+      };
+
+      fontThickenStrength = mkOption {
+        type = types.int;
+        default = 70;
+        description = "Font thicken strength (0-255, macOS only)";
+      };
+
+      unfocusedSplitFill = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Color to fill unfocused splits (null = no fill)";
       };
     };
 
@@ -219,8 +265,69 @@ in {
 
       features = mkOption {
         type = types.listOf types.str;
-        default = ["cursor" "sudo" "title"];
+        default = ["cursor" "sudo" "title" "ssh-env" "ssh-terminfo"];
         description = "Shell integration features to enable";
+      };
+    };
+
+    shaders = {
+      enable = mkEnableOption "custom GLSL shaders";
+
+      bloom = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Enable subtle bloom glow effect on bright text";
+      };
+
+      cursorTrail = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Enable cursor trail effect when cursor moves";
+      };
+
+      animation = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Enable shader animation (set false for static effects only)";
+      };
+
+      custom = mkOption {
+        type = types.listOf types.path;
+        default = [];
+        description = "Additional custom shader file paths to load";
+      };
+    };
+
+    keybindings = {
+      enable = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Enable curated keybinding defaults";
+      };
+
+      promptNavigation = mkOption {
+        type = types.bool;
+        default = true;
+        description = "cmd+up/down to jump between shell prompts";
+      };
+
+      splitManagement = mkOption {
+        type = types.bool;
+        default = true;
+        description = "ctrl+shift+arrows for split resize, cmd+shift+enter for zoom";
+      };
+
+      quickTerminal = mkOption {
+        type = types.bool;
+        default = true;
+        description = "global:cmd+grave for quick terminal toggle";
+      };
+
+      custom = mkOption {
+        type = types.listOf types.str;
+        default = [];
+        description = "Additional keybindings in 'keys=action' format";
+        example = [ "ctrl+shift+c=copy_to_clipboard" "ctrl+shift+v=paste_from_clipboard" ];
       };
     };
 
@@ -253,6 +360,15 @@ in {
          then pkgs.ghostty
          else pkgs.ghostty-bin)
       ];
+    })
+
+    # Deploy shader files to ~/.config/ghostty/shaders/
+    (mkIf cfg.shaders.enable {
+      home.file = lib.listToAttrs (map (path:
+        lib.nameValuePair
+          ".config/ghostty/shaders/${builtins.baseNameOf (toString path)}"
+          { source = path; }
+      ) builtinShaders);
     })
 
     # Configure ghostty with Nord theme on Linux using home-manager module
@@ -291,7 +407,13 @@ in {
           unfocused-split-opacity = cfg.appearance.unfocusedSplitOpacity;
           bold-is-bright = cfg.appearance.boldIsBright;
           window-colorspace = cfg.appearance.windowColorspace;
+          macos-titlebar-style = cfg.appearance.macosTitlebarStyle;
+          font-thicken-strength = cfg.appearance.fontThickenStrength;
         }
+
+        (mkIf (cfg.appearance.unfocusedSplitFill != null) {
+          unfocused-split-fill = cfg.appearance.unfocusedSplitFill;
+        })
 
         # Use built-in Nord theme
         (mkIf (cfg.theme.nordTheme && cfg.theme.useBuiltinNord) {
@@ -338,6 +460,16 @@ in {
           ];
         })
 
+        # Shader settings
+        (mkIf cfg.shaders.enable {
+          custom-shader-animation = cfg.shaders.animation;
+        })
+
+        # Keybinding settings
+        (mkIf cfg.keybindings.enable {
+          macos-option-as-alt = true;
+        })
+
         # Performance settings
         {
           window-vsync = cfg.performance.vsync;
@@ -370,6 +502,19 @@ in {
         # Extra user-defined settings
         cfg.extraSettings
       ];
+
+      # Repeatable keys (shaders, keybindings) via extraConfig
+      extraConfig = let
+        shaderLines = optionalString cfg.shaders.enable (
+          concatMapStringsSep "\n" (path:
+            "custom-shader = ${config.home.homeDirectory}/.config/ghostty/shaders/${builtins.baseNameOf (toString path)}"
+          ) allShaderPaths
+        );
+        keybindLines = optionalString cfg.keybindings.enable (
+          concatMapStringsSep "\n" (kb: "keybind = ${kb}") allKeybinds
+        );
+      in
+        concatStringsSep "\n" (filter (s: s != "") [shaderLines keybindLines]);
     };
     })
 
@@ -400,6 +545,10 @@ in {
           background-blur-radius = ${toString cfg.appearance.backgroundBlurRadius}
           unfocused-split-opacity = ${toString cfg.appearance.unfocusedSplitOpacity}
           bold-is-bright = ${if cfg.appearance.boldIsBright then "true" else "false"}
+          macos-titlebar-style = ${cfg.appearance.macosTitlebarStyle}
+          font-thicken-strength = ${toString cfg.appearance.fontThickenStrength}
+        '' + optionalString (cfg.appearance.unfocusedSplitFill != null) ''
+          unfocused-split-fill = ${cfg.appearance.unfocusedSplitFill}
         '';
 
         nordThemeSettings = if cfg.theme.nordTheme && cfg.theme.useBuiltinNord then ''
@@ -459,6 +608,18 @@ in {
           shell-integration-features = ${concatStringsSep "," cfg.shellIntegration.features}
         '' else "";
 
+        shaderSettings = optionalString cfg.shaders.enable (
+          "custom-shader-animation = ${if cfg.shaders.animation then "true" else "false"}\n"
+          + concatMapStringsSep "\n" (path:
+            "custom-shader = ${config.home.homeDirectory}/.config/ghostty/shaders/${builtins.baseNameOf (toString path)}"
+          ) allShaderPaths
+        );
+
+        keybindSettings = optionalString cfg.keybindings.enable (
+          "macos-option-as-alt = true\n"
+          + concatMapStringsSep "\n" (kb: "keybind = ${kb}") allKeybinds
+        );
+
         extraSettingsText = concatStringsSep "\n" (
           mapAttrsToList (k: v:
             if builtins.isBool v then "${k} = ${if v then "true" else "false"}"
@@ -485,6 +646,10 @@ in {
         ${behaviorSettings}
 
         ${shellIntegrationSettings}
+
+        ${shaderSettings}
+
+        ${keybindSettings}
 
         ${extraSettingsText}
       '';
