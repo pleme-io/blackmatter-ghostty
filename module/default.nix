@@ -224,6 +224,14 @@ in {
       };
     };
 
+    darwin = {
+      useSourceBuild = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Use Ghostty built from source instead of prebuilt binary (requires Xcode)";
+      };
+    };
+
     extraSettings = mkOption {
       type = types.attrs;
       default = {};
@@ -240,7 +248,11 @@ in {
       home.packages = [pkgs.ghostty];
     })
     (mkIf pkgs.stdenv.isDarwin {
-      home.packages = [pkgs.ghostty-bin];
+      home.packages = [
+        (if cfg.darwin.useSourceBuild
+         then pkgs.ghostty
+         else pkgs.ghostty-bin)
+      ];
     })
 
     # Configure ghostty with Nord theme on Linux using home-manager module

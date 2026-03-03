@@ -1,5 +1,92 @@
 {
   "nodes": {
+    "blackmatter-macos": {
+      "inputs": {
+        "blackmatter-zig": [
+          "blackmatter-zig"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "substrate": [
+          "substrate"
+        ]
+      },
+      "locked": {
+        "lastModified": 1772473444,
+        "narHash": "sha256-pK68D/n2jA++6MweMmvEmN/3wONx+g/dIDQrFNxjoS0=",
+        "owner": "pleme-io",
+        "repo": "blackmatter-macos",
+        "rev": "675635e840b1a8b2cd81169b78d408d9cb687b93",
+        "type": "github"
+      },
+      "original": {
+        "owner": "pleme-io",
+        "repo": "blackmatter-macos",
+        "type": "github"
+      }
+    },
+    "blackmatter-zig": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ],
+        "substrate": [
+          "substrate"
+        ]
+      },
+      "locked": {
+        "lastModified": 1772202051,
+        "narHash": "sha256-cnCZ7SAXsUab2gxrBCaHumPr8EmpVHGpxSJ4e2OLfJ8=",
+        "owner": "pleme-io",
+        "repo": "blackmatter-zig",
+        "rev": "ce4ac31930da1d0262bb610b3fa49cebb20e8912",
+        "type": "github"
+      },
+      "original": {
+        "owner": "pleme-io",
+        "repo": "blackmatter-zig",
+        "type": "github"
+      }
+    },
+    "crate2nix": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1739473963,
+        "narHash": "sha256-ItAhpjNUzEWd/cgZVyW/jvoGbCec4TK29e1Mnmn1oJE=",
+        "owner": "nix-community",
+        "repo": "crate2nix",
+        "rev": "be31feae9a82c225c0fd1bdf978565dc452a483a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "crate2nix",
+        "type": "github"
+      }
+    },
+    "fenix": {
+      "inputs": {
+        "nixpkgs": [
+          "substrate",
+          "nixpkgs"
+        ],
+        "rust-analyzer-src": "rust-analyzer-src"
+      },
+      "locked": {
+        "lastModified": 1763534658,
+        "narHash": "sha256-i/51/Zi/1pM9hZxxSuA3nVPpyqlGoWwJwajyA/loOpo=",
+        "owner": "nix-community",
+        "repo": "fenix",
+        "rev": "69e40ddf45698d0115a62a7a15d8412f35dd4c09",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "fenix",
+        "type": "github"
+      }
+    },
     "flake-compat": {
       "flake": false,
       "locked": {
@@ -13,6 +100,27 @@
       "original": {
         "owner": "edolstra",
         "repo": "flake-compat",
+        "type": "github"
+      }
+    },
+    "flake-parts": {
+      "inputs": {
+        "nixpkgs-lib": [
+          "substrate",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1769996383,
+        "narHash": "sha256-AnYjnFWgS49RlqX7LrC4uA+sCCDBj0Ry/WOJ5XWAsa0=",
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
+        "rev": "57928607ea566b5db3ad13af0e57e921e6b12381",
+        "type": "github"
+      },
+      "original": {
+        "owner": "hercules-ci",
+        "repo": "flake-parts",
         "type": "github"
       }
     },
@@ -109,8 +217,51 @@
     },
     "root": {
       "inputs": {
+        "blackmatter-macos": "blackmatter-macos",
+        "blackmatter-zig": "blackmatter-zig",
         "ghostty": "ghostty",
-        "nixpkgs": "nixpkgs_2"
+        "nixpkgs": "nixpkgs_2",
+        "substrate": "substrate"
+      }
+    },
+    "rust-analyzer-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1762860488,
+        "narHash": "sha256-rMfWMCOo/pPefM2We0iMBLi2kLBAnYoB9thi4qS7uk4=",
+        "owner": "rust-lang",
+        "repo": "rust-analyzer",
+        "rev": "2efc80078029894eec0699f62ec8d5c1a56af763",
+        "type": "github"
+      },
+      "original": {
+        "owner": "rust-lang",
+        "ref": "nightly",
+        "repo": "rust-analyzer",
+        "type": "github"
+      }
+    },
+    "substrate": {
+      "inputs": {
+        "crate2nix": "crate2nix",
+        "fenix": "fenix",
+        "flake-parts": "flake-parts",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1772473418,
+        "narHash": "sha256-4geNc5HzC/v45OPlw5CXARvFWOeMyB6WfPu5Xzuy3d0=",
+        "owner": "pleme-io",
+        "repo": "substrate",
+        "rev": "68349e8c8ac9a78efc2cc8f487c7490fff18cba0",
+        "type": "github"
+      },
+      "original": {
+        "owner": "pleme-io",
+        "repo": "substrate",
+        "type": "github"
       }
     },
     "systems": {
