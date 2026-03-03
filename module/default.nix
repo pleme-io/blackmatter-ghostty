@@ -461,14 +461,20 @@ in {
         })
 
         # Shader settings
-        (mkIf cfg.shaders.enable {
+        (mkIf cfg.shaders.enable ({
           custom-shader-animation = cfg.shaders.animation;
-        })
+        } // lib.optionalAttrs (allShaderPaths != []) {
+          custom-shader = map (path:
+            "${config.home.homeDirectory}/.config/ghostty/shaders/${builtins.baseNameOf (toString path)}"
+          ) allShaderPaths;
+        }))
 
         # Keybinding settings
-        (mkIf cfg.keybindings.enable {
+        (mkIf cfg.keybindings.enable ({
           macos-option-as-alt = true;
-        })
+        } // lib.optionalAttrs (allKeybinds != []) {
+          keybind = allKeybinds;
+        }))
 
         # Performance settings
         {
@@ -502,19 +508,6 @@ in {
         # Extra user-defined settings
         cfg.extraSettings
       ];
-
-      # Repeatable keys (shaders, keybindings) via extraConfig
-      extraConfig = let
-        shaderLines = optionalString cfg.shaders.enable (
-          concatMapStringsSep "\n" (path:
-            "custom-shader = ${config.home.homeDirectory}/.config/ghostty/shaders/${builtins.baseNameOf (toString path)}"
-          ) allShaderPaths
-        );
-        keybindLines = optionalString cfg.keybindings.enable (
-          concatMapStringsSep "\n" (kb: "keybind = ${kb}") allKeybinds
-        );
-      in
-        concatStringsSep "\n" (filter (s: s != "") [shaderLines keybindLines]);
     };
     })
 

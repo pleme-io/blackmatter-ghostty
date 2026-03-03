@@ -81,7 +81,6 @@
           type = lib.types.submodule {
             options.enable = lib.mkOption { type = lib.types.bool; default = false; };
             options.settings = lib.mkOption { type = lib.types.anything; default = {}; };
-            options.extraConfig = lib.mkOption { type = lib.types.str; default = ""; };
           };
           default = {};
         };
