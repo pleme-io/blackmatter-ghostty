@@ -19,9 +19,14 @@
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.substrate.follows = "substrate";
     };
+    dev-tools = {
+      url = "github:pleme-io/dev-tools";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.substrate.follows = "substrate";
+    };
   };
 
-  outputs = { self, nixpkgs, ghostty, substrate, blackmatter-macos, blackmatter-zig }:
+  outputs = { self, nixpkgs, ghostty, substrate, blackmatter-macos, blackmatter-zig, dev-tools }:
     let
       lib = nixpkgs.lib;
 
@@ -47,8 +52,9 @@
       # Build the Darwin source package for a given system
       mkDarwinGhostty = system: let
         pkgs = darwinPkgs system;
+        nix-macos = dev-tools.packages.${system}.nix-macos;
       in import ./pkgs/ghostty-darwin.nix {
-        inherit pkgs lib;
+        inherit pkgs lib nix-macos;
         mkZigSwiftApp = pkgs.mkZigSwiftApp;
         ghosttySrc = ghostty;
       };
