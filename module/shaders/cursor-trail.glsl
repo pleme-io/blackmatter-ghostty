@@ -1,171 +1,187 @@
-// Cursor trail effect for Ghostty terminal
-// Creates a smooth trailing warp when the cursor moves between positions
-// Based on sahaj-b/ghostty-cursor-shaders cursor_warp.glsl
+// Cursor aura — always-on lightsaber glow with trailing
 //
-// Ghostty cursor uniforms:
-//   iCurrentCursor   — vec4(x, y, width, height) in pixels
-//   iPreviousCursor   — vec4(x, y, width, height) in pixels
-//   iTimeCursorChange — float, time of last cursor position change
-//   iCurrentCursorColor — vec4, RGBA color of the cursor
+// A soft light-blue aura that hugs the cursor at all times, pulses gently
+// like the hum of a lightsaber, and leaves a fading trail when it moves.
+//
+// 10 refinement iterations:
+//   1. Basic radial glow centered on cursor
+//   2. Dual-layer glow (bright core + soft outer)
+//   3. Subtle pulse (lightsaber hum)
+//   4. Trail glow along movement path
+//   5. Smooth head/tail interpolation for trail
+//   6. Cyan-white core blending to deeper blue edges
+//   7. Distance-attenuated trail (dimmer further from head)
+//   8. Soft noise shimmer for organic feel
+//   9. Smoother decay curves and clamping
+//  10. Final parameter tuning for production
 
-// ─── Tuning constants ───────────────────────────────────────────────
+// ─── Aura color palette ──────────────────────────────────────────────
+// Core: near-white cyan (lightsaber blade center)
+const vec3 CORE_COLOR  = vec3(0.75, 0.92, 1.0);
+// Mid: light frost blue
+const vec3 MID_COLOR   = vec3(0.45, 0.72, 1.0);
+// Outer: deeper blue haze
+const vec3 OUTER_COLOR = vec3(0.25, 0.50, 0.90);
 
-// Trail duration: how long the trail lingers (seconds)
-const float TRAIL_DURATION = 0.35;
+// ─── Aura geometry ───────────────────────────────────────────────────
+const float CORE_RADIUS  = 24.0;   // bright inner core (pixels)
+const float MID_RADIUS   = 60.0;   // mid glow ring
+const float OUTER_RADIUS = 120.0;  // soft outer haze
 
-// Trail width: how wide the distortion band is (pixels)
-const float TRAIL_WIDTH = 24.0;
+// ─── Aura intensity ──────────────────────────────────────────────────
+const float CORE_INTENSITY  = 0.50;  // core brightness — clearly visible
+const float MID_INTENSITY   = 0.20;  // mid ring brightness
+const float OUTER_INTENSITY = 0.08;  // outer haze brightness
 
-// Warp intensity: max pixel displacement at peak
-const float WARP_STRENGTH = 8.0;
+// ─── Pulse (lightsaber hum) ──────────────────────────────────────────
+const float PULSE_FREQ   = 2.5;   // hum frequency (Hz)
+const float PULSE_AMOUNT = 0.04;  // intensity modulation depth
+const float PULSE_DRIFT  = 0.7;   // secondary slow drift frequency
 
-// Glow intensity: brightness of the trail glow
-const float GLOW_INTENSITY = 0.25;
+// ─── Trail parameters ────────────────────────────────────────────────
+const float TRAIL_DURATION   = 0.45;  // trail fade time (seconds)
+const float TRAIL_WIDTH      = 30.0;  // trail glow width (pixels)
+const float TRAIL_INTENSITY  = 0.18;  // trail peak brightness
+const float TRAIL_HEAD_BIAS  = 0.7;   // head-to-tail brightness ratio
 
-// Glow falloff: how quickly glow fades from the trail center
-const float GLOW_FALLOFF = 3.0;
+// ─── Helpers ─────────────────────────────────────────────────────────
 
-// Number of trail segments for smooth interpolation
-const int TRAIL_SEGMENTS = 32;
-
-// ─── Helpers ────────────────────────────────────────────────────────
-
-// Smooth cubic ease-out
 float easeOut(float t) {
     float inv = 1.0 - t;
     return 1.0 - inv * inv * inv;
 }
 
-// Signed distance from point p to line segment (a, b)
-// Returns: (distance, t) where t is the projection parameter [0,1]
+// Signed distance from point p to line segment (a, b), returns (dist, t)
 vec2 sdSegment(vec2 p, vec2 a, vec2 b) {
     vec2 pa = p - a;
     vec2 ba = b - a;
-    float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
-    float d = length(pa - ba * h);
-    return vec2(d, h);
+    float denom = dot(ba, ba);
+    if (denom < 0.001) return vec2(length(pa), 0.5);
+    float h = clamp(dot(pa, ba) / denom, 0.0, 1.0);
+    return vec2(length(pa - ba * h), h);
 }
 
-// ─── Main ───────────────────────────────────────────────────────────
+// Simple pseudo-noise for shimmer
+float hash(vec2 p) {
+    return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+
+float shimmer(vec2 p, float t) {
+    vec2 cell = floor(p * 0.08);
+    float n = hash(cell + floor(t * 3.0));
+    return 0.85 + 0.15 * n;
+}
+
+// ─── Main ────────────────────────────────────────────────────────────
 
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec2 uv = fragCoord / iResolution.xy;
-
-    // Time since cursor last moved
-    float dt = iTime - iTimeCursorChange;
-
-    // Normalized progress [0, 1] — 0 = just moved, 1 = trail fully faded
-    float progress = clamp(dt / TRAIL_DURATION, 0.0, 1.0);
-
-    // Early exit: trail has fully faded
-    if (progress >= 1.0) {
-        fragColor = texture(iChannel0, uv);
-        return;
-    }
-
-    // Cursor centers (pixels)
-    vec2 prevCenter = iPreviousCursor.xy + iPreviousCursor.zw * 0.5;
-    vec2 currCenter = iCurrentCursor.xy + iCurrentCursor.zw * 0.5;
-
-    // Flip Y — Ghostty cursor coords are top-down, GL is bottom-up
-    prevCenter.y = iResolution.y - prevCenter.y;
-    currCenter.y = iResolution.y - currCenter.y;
-
-    // Distance between old and new cursor positions
-    float moveDistance = length(currCenter - prevCenter);
-
-    // Skip if cursor didn't actually move (or moved < 1 pixel)
-    if (moveDistance < 1.0) {
-        fragColor = texture(iChannel0, uv);
-        return;
-    }
-
-    // ─── Trail path ─────────────────────────────────────────────
-
-    // Animated head position — the trail head moves from prev to curr
-    float headProgress = easeOut(min(progress * 2.0, 1.0));
-    vec2 headPos = mix(prevCenter, currCenter, headProgress);
-
-    // Animated tail position — the tail catches up after the head
-    float tailProgress = easeOut(max((progress - 0.15) * 2.5, 0.0));
-    vec2 tailPos = mix(prevCenter, currCenter, tailProgress);
-
-    // Direction of travel
-    vec2 moveDir = normalize(currCenter - prevCenter);
-    vec2 movePerp = vec2(-moveDir.y, moveDir.x);
-
-    // ─── Distance from fragment to trail segment ────────────────
-
-    vec2 seg = sdSegment(fragCoord, tailPos, headPos);
-    float distToTrail = seg.x;
-    float trailParam = seg.y; // 0 = tail, 1 = head
-
-    // Fade factor: distance from trail center
-    float trailFade = 1.0 - smoothstep(0.0, TRAIL_WIDTH, distToTrail);
-
-    // Skip fragments too far from the trail
-    if (trailFade <= 0.0) {
-        fragColor = texture(iChannel0, uv);
-        return;
-    }
-
-    // ─── Temporal fade ──────────────────────────────────────────
-
-    // Overall opacity fades as the trail ages
-    float timeFade = 1.0 - easeOut(progress);
-
-    // Trail is brightest at the head, dimmer at the tail
-    float headFade = mix(0.3, 1.0, trailParam);
-
-    float combinedFade = trailFade * timeFade * headFade;
-
-    // ─── Warp distortion ────────────────────────────────────────
-
-    // Displacement: push pixels away from the trail path perpendicular to movement
-    // Stronger near the head, weaker near the tail
-    float warpAmount = WARP_STRENGTH * combinedFade;
-
-    // Determine which side of the trail this fragment is on
-    vec2 toFrag = fragCoord - mix(tailPos, headPos, trailParam);
-    float side = sign(dot(toFrag, movePerp));
-
-    // Apply displacement in UV space
-    vec2 warpOffset = movePerp * side * warpAmount / iResolution.xy;
-    vec2 warpedUV = uv + warpOffset;
-
-    // Clamp to valid UV range
-    warpedUV = clamp(warpedUV, vec2(0.0), vec2(1.0));
-
-    // Sample the warped texture
-    vec4 warped = texture(iChannel0, warpedUV);
-
-    // ─── Glow ───────────────────────────────────────────────────
-
-    // Color glow along the trail using cursor color
-    vec3 glowColor = iCurrentCursorColor.rgb;
-    float glowStrength = GLOW_INTENSITY * combinedFade;
-
-    // Soft additive glow
-    vec3 glow = glowColor * glowStrength * exp(-GLOW_FALLOFF * distToTrail / TRAIL_WIDTH);
-
-    // ─── Chromatic fringe (subtle) ──────────────────────────────
-
-    // Slight color separation at the warp edges for a polished look
-    float chromaOffset = 0.5 * combinedFade / iResolution.x;
-    vec2 chromaDir = movePerp / iResolution.xy;
-
-    float r = texture(iChannel0, warpedUV + chromaDir * chromaOffset).r;
-    float g = warped.g;
-    float b = texture(iChannel0, warpedUV - chromaDir * chromaOffset).b;
-
-    vec3 chromatic = vec3(r, g, b);
-
-    // ─── Composite ──────────────────────────────────────────────
-
-    // Blend between original and warped+glow based on trail proximity
     vec4 original = texture(iChannel0, uv);
-    vec3 trailColor = chromatic + glow;
-    vec3 finalColor = mix(original.rgb, trailColor, combinedFade * 0.7);
+
+    // ── Cursor center (flip Y: Ghostty is top-down, GL is bottom-up) ──
+    vec2 cursorCenter = iCurrentCursor.xy + iCurrentCursor.zw * 0.5;
+    cursorCenter.y = iResolution.y - cursorCenter.y;
+
+    vec2 prevCenter = iPreviousCursor.xy + iPreviousCursor.zw * 0.5;
+    prevCenter.y = iResolution.y - prevCenter.y;
+
+    // ── Distance from fragment to cursor ──
+    float dist = length(fragCoord - cursorCenter);
+
+    // ── Early exit: too far from both aura and any possible trail ──
+    float dt = iTime - iTimeCursorChange;
+    float trailProgress = clamp(dt / TRAIL_DURATION, 0.0, 1.0);
+    float moveDistance = length(cursorCenter - prevCenter);
+    float maxReach = OUTER_RADIUS + moveDistance + TRAIL_WIDTH;
+    float distToPrev = length(fragCoord - prevCenter);
+    if (dist > maxReach && distToPrev > maxReach) {
+        fragColor = original;
+        return;
+    }
+
+    // ── Pulse modulation (lightsaber hum) ──
+    float pulse = 1.0
+        + PULSE_AMOUNT * sin(iTime * PULSE_FREQ * 6.2832)
+        + PULSE_AMOUNT * 0.5 * sin(iTime * PULSE_DRIFT * 6.2832 + 1.0);
+
+    // ── Shimmer for organic feel ──
+    float shim = shimmer(fragCoord, iTime);
+
+    // ── Always-on radial aura ──
+    float auraGlow = 0.0;
+    vec3 auraColor = vec3(0.0);
+
+    // Core layer — bright white-cyan
+    float coreGlow = CORE_INTENSITY * smoothstep(CORE_RADIUS, 0.0, dist);
+    auraColor += CORE_COLOR * coreGlow;
+    auraGlow += coreGlow;
+
+    // Mid layer — frost blue
+    float midGlow = MID_INTENSITY * smoothstep(MID_RADIUS, CORE_RADIUS * 0.5, dist);
+    auraColor += MID_COLOR * midGlow;
+    auraGlow += midGlow;
+
+    // Outer layer — deep blue haze, gaussian-ish falloff
+    float outerFactor = exp(-2.0 * (dist * dist) / (OUTER_RADIUS * OUTER_RADIUS));
+    float outerGlow = OUTER_INTENSITY * outerFactor;
+    auraColor += OUTER_COLOR * outerGlow;
+    auraGlow += outerGlow;
+
+    // Apply pulse and shimmer
+    auraColor *= pulse * shim;
+    auraGlow *= pulse;
+
+    // ── Trail glow (only while trail is active) ──
+    vec3 trailColor = vec3(0.0);
+    float trailGlow = 0.0;
+
+    if (trailProgress < 1.0 && moveDistance > 1.0) {
+        // Animated head/tail positions
+        float headProg = easeOut(min(trailProgress * 2.5, 1.0));
+        vec2 headPos = mix(prevCenter, cursorCenter, headProg);
+
+        float tailProg = easeOut(max((trailProgress - 0.1) * 2.0, 0.0));
+        vec2 tailPos = mix(prevCenter, cursorCenter, tailProg);
+
+        // Distance from fragment to trail segment
+        vec2 seg = sdSegment(fragCoord, tailPos, headPos);
+        float distToTrail = seg.x;
+        float trailParam = seg.y; // 0 = tail, 1 = head
+
+        // Spatial fade — smooth falloff from trail center
+        float spatialFade = smoothstep(TRAIL_WIDTH, 0.0, distToTrail);
+
+        if (spatialFade > 0.0) {
+            // Temporal fade — trail fades over time
+            float timeFade = 1.0 - easeOut(trailProgress);
+
+            // Head-to-tail brightness gradient
+            float headFade = mix(1.0 - TRAIL_HEAD_BIAS, 1.0, trailParam);
+
+            float combinedFade = spatialFade * timeFade * headFade;
+
+            // Trail color: blend from outer to mid color along the trail
+            vec3 tColor = mix(OUTER_COLOR, MID_COLOR, trailParam);
+
+            trailGlow = TRAIL_INTENSITY * combinedFade * pulse * shim;
+            trailColor = tColor * trailGlow;
+        }
+    }
+
+    // ── Composite ──
+    float totalGlow = auraGlow + trailGlow;
+
+    if (totalGlow < 0.001) {
+        fragColor = original;
+        return;
+    }
+
+    // Additive blend — glow on top of terminal content
+    vec3 finalColor = original.rgb + auraColor + trailColor;
+
+    // Soft clamp to prevent blow-out while preserving HDR feel
+    finalColor = finalColor / (1.0 + totalGlow * 0.5);
+    finalColor = mix(original.rgb, finalColor, smoothstep(0.0, 0.01, totalGlow));
 
     fragColor = vec4(finalColor, original.a);
 }
