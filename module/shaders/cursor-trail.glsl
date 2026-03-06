@@ -3,48 +3,47 @@
 // A soft light-blue aura that hugs the cursor at all times, pulses gently
 // like the hum of a lightsaber, and leaves a fading trail when it moves.
 //
-// 10 refinement iterations:
-//   1. Basic radial glow centered on cursor
-//   2. Dual-layer glow (bright core + soft outer)
-//   3. Subtle pulse (lightsaber hum)
-//   4. Trail glow along movement path
-//   5. Smooth head/tail interpolation for trail
-//   6. Cyan-white core blending to deeper blue edges
-//   7. Distance-attenuated trail (dimmer further from head)
-//   8. Soft noise shimmer for organic feel
-//   9. Smoother decay curves and clamping
-//  10. Final parameter tuning for production
+// Coordinate convention (from Ghostty shadertoy_prefix.glsl):
+//   fragCoord and iCurrentCursor are in the SAME coordinate space.
+//   iCurrentCursor.xy = top-left corner of cursor cell (GL coords: x=left, y=top edge)
+//   iCurrentCursor.zw = width, height of cursor cell
+//   Center = xy + vec2(z*0.5, -w*0.5)
+//   NO Y-flip needed.
 
 // ─── Aura color palette ──────────────────────────────────────────────
-// Core: near-white cyan (lightsaber blade center)
-const vec3 CORE_COLOR  = vec3(0.75, 0.92, 1.0);
-// Mid: light frost blue
-const vec3 MID_COLOR   = vec3(0.45, 0.72, 1.0);
-// Outer: deeper blue haze
-const vec3 OUTER_COLOR = vec3(0.25, 0.50, 0.90);
+const vec3 CORE_COLOR  = vec3(0.75, 0.92, 1.0);   // near-white cyan
+const vec3 MID_COLOR   = vec3(0.45, 0.72, 1.0);   // light frost blue
+const vec3 OUTER_COLOR = vec3(0.25, 0.50, 0.90);  // deeper blue haze
 
 // ─── Aura geometry ───────────────────────────────────────────────────
-const float CORE_RADIUS  = 24.0;   // bright inner core (pixels)
-const float MID_RADIUS   = 60.0;   // mid glow ring
-const float OUTER_RADIUS = 120.0;  // soft outer haze
+const float CORE_RADIUS  = 28.0;   // bright inner core (pixels)
+const float MID_RADIUS   = 70.0;   // mid glow ring
+const float OUTER_RADIUS = 140.0;  // soft outer haze
 
 // ─── Aura intensity ──────────────────────────────────────────────────
-const float CORE_INTENSITY  = 0.50;  // core brightness — clearly visible
-const float MID_INTENSITY   = 0.20;  // mid ring brightness
-const float OUTER_INTENSITY = 0.08;  // outer haze brightness
+const float CORE_INTENSITY  = 0.60;  // core brightness
+const float MID_INTENSITY   = 0.25;  // mid ring brightness
+const float OUTER_INTENSITY = 0.10;  // outer haze brightness
 
 // ─── Pulse (lightsaber hum) ──────────────────────────────────────────
 const float PULSE_FREQ   = 2.5;   // hum frequency (Hz)
-const float PULSE_AMOUNT = 0.04;  // intensity modulation depth
+const float PULSE_AMOUNT = 0.05;  // intensity modulation depth
 const float PULSE_DRIFT  = 0.7;   // secondary slow drift frequency
 
 // ─── Trail parameters ────────────────────────────────────────────────
 const float TRAIL_DURATION   = 0.45;  // trail fade time (seconds)
-const float TRAIL_WIDTH      = 30.0;  // trail glow width (pixels)
-const float TRAIL_INTENSITY  = 0.18;  // trail peak brightness
+const float TRAIL_WIDTH      = 35.0;  // trail glow width (pixels)
+const float TRAIL_INTENSITY  = 0.22;  // trail peak brightness
 const float TRAIL_HEAD_BIAS  = 0.7;   // head-to-tail brightness ratio
 
 // ─── Helpers ─────────────────────────────────────────────────────────
+
+// Cursor center from iCurrentCursor/iPreviousCursor vec4.
+// xy = top-left corner (GL coords), zw = cell size.
+// Center: x + w/2 horizontally, y - h/2 vertically (y=top edge, move down).
+vec2 cursorCellCenter(vec4 c) {
+    return c.xy + vec2(c.z * 0.5, -c.w * 0.5);
+}
 
 float easeOut(float t) {
     float inv = 1.0 - t;
@@ -78,12 +77,9 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec2 uv = fragCoord / iResolution.xy;
     vec4 original = texture(iChannel0, uv);
 
-    // ── Cursor center (flip Y: Ghostty is top-down, GL is bottom-up) ──
-    vec2 cursorCenter = iCurrentCursor.xy + iCurrentCursor.zw * 0.5;
-    cursorCenter.y = iResolution.y - cursorCenter.y;
-
-    vec2 prevCenter = iPreviousCursor.xy + iPreviousCursor.zw * 0.5;
-    prevCenter.y = iResolution.y - prevCenter.y;
+    // ── Cursor centers (no Y-flip — same coord space as fragCoord) ──
+    vec2 cursorCenter = cursorCellCenter(iCurrentCursor);
+    vec2 prevCenter   = cursorCellCenter(iPreviousCursor);
 
     // ── Distance from fragment to cursor ──
     float dist = length(fragCoord - cursorCenter);
