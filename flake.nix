@@ -24,9 +24,13 @@
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.substrate.follows = "substrate";
     };
+    devenv = {
+      url = "github:cachix/devenv";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs, ghostty, substrate, blackmatter-macos, blackmatter-zig, dev-tools }:
+  outputs = { self, nixpkgs, ghostty, substrate, blackmatter-macos, blackmatter-zig, dev-tools, devenv }:
     let
       lib = nixpkgs.lib;
 
@@ -113,22 +117,35 @@
       # ── Home-manager module ──────────────────────────────────────
       homeManagerModules.default = import ./module;
 
-      # ── Dev shells (Darwin — for iterating on the build) ─────────
-      devShells = forDarwin (system: let
-        pkgs = darwinPkgs system;
-      in {
-        default = pkgs.mkShell {
-          buildInputs = [
-            pkgs.zigToolchain
-            pkgs.swiftToolchain
-          ];
-          shellHook = ''
-            unset SDKROOT
-            unset DEVELOPER_DIR
-            echo "Ghostty dev shell — Zig + Swift toolchains available"
-            echo "  zig version: $(zig version)"
-            echo "  swift --version: $(swift --version 2>&1 | head -1)"
-          '';
+      # ── Dev shells ────────────────────────────────────────────────
+      devShells = lib.genAttrs allSystems (system: let
+        pkgs = import nixpkgs { inherit system; };
+        darwinShells = lib.optionalAttrs (isDarwin system) (let
+          dpkgs = darwinPkgs system;
+        in {
+          default = dpkgs.mkShell {
+            buildInputs = [
+              dpkgs.zigToolchain
+              dpkgs.swiftToolchain
+            ];
+            shellHook = ''
+              unset SDKROOT
+              unset DEVELOPER_DIR
+              echo "Ghostty dev shell — Zig + Swift toolchains available"
+              echo "  zig version: $(zig version)"
+              echo "  swift --version: $(swift --version 2>&1 | head -1)"
+            '';
+          };
+        });
+      in darwinShells // {
+        devenv = devenv.lib.mkShell {
+          inputs = { inherit nixpkgs devenv; };
+          inherit pkgs;
+          modules = [{
+            languages.nix.enable = true;
+            packages = with pkgs; [ nixpkgs-fmt nil ];
+            git-hooks.hooks.nixpkgs-fmt.enable = true;
+          }];
         };
       });
 
