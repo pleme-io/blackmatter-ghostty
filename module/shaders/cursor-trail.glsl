@@ -16,14 +16,14 @@ const vec3 MID_COLOR   = vec3(0.45, 0.72, 1.0);   // light frost blue
 const vec3 OUTER_COLOR = vec3(0.25, 0.50, 0.90);  // deeper blue haze
 
 // ─── Aura geometry ───────────────────────────────────────────────────
-const float CORE_RADIUS  = 28.0;   // bright inner core (pixels)
-const float MID_RADIUS   = 70.0;   // mid glow ring
-const float OUTER_RADIUS = 140.0;  // soft outer haze
+const float CORE_RADIUS  = 8.0;    // tight bright core (pixels)
+const float MID_RADIUS   = 22.0;   // close mid glow
+const float OUTER_RADIUS = 55.0;   // subtle outer haze
 
 // ─── Aura intensity ──────────────────────────────────────────────────
-const float CORE_INTENSITY  = 0.60;  // core brightness
-const float MID_INTENSITY   = 0.25;  // mid ring brightness
-const float OUTER_INTENSITY = 0.10;  // outer haze brightness
+const float CORE_INTENSITY  = 0.85;  // concentrated core brightness
+const float MID_INTENSITY   = 0.12;  // subtle mid ring
+const float OUTER_INTENSITY = 0.04;  // barely-there outer haze
 
 // ─── Pulse (lightsaber hum) ──────────────────────────────────────────
 const float PULSE_FREQ   = 2.5;   // hum frequency (Hz)
@@ -31,10 +31,10 @@ const float PULSE_AMOUNT = 0.05;  // intensity modulation depth
 const float PULSE_DRIFT  = 0.7;   // secondary slow drift frequency
 
 // ─── Trail parameters ────────────────────────────────────────────────
-const float TRAIL_DURATION   = 0.45;  // trail fade time (seconds)
-const float TRAIL_WIDTH      = 35.0;  // trail glow width (pixels)
-const float TRAIL_INTENSITY  = 0.22;  // trail peak brightness
-const float TRAIL_HEAD_BIAS  = 0.7;   // head-to-tail brightness ratio
+const float TRAIL_DURATION   = 0.40;  // trail fade time (seconds)
+const float TRAIL_WIDTH      = 12.0;  // thin trail saber width (pixels)
+const float TRAIL_INTENSITY  = 0.30;  // trail peak brightness (concentrated)
+const float TRAIL_HEAD_BIAS  = 0.8;   // head-to-tail brightness ratio
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -144,8 +144,9 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
         float distToTrail = seg.x;
         float trailParam = seg.y; // 0 = tail, 1 = head
 
-        // Spatial fade — smooth falloff from trail center
+        // Spatial fade — sharp core with subtle glow fringe
         float spatialFade = smoothstep(TRAIL_WIDTH, 0.0, distToTrail);
+        spatialFade *= spatialFade;  // sharpen falloff for concentrated saber edge
 
         if (spatialFade > 0.0) {
             // Temporal fade — trail fades over time
