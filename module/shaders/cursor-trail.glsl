@@ -78,7 +78,9 @@ float hash(vec2 p) {
 
 float shimmer(vec2 p, float t) {
     vec2 cell = floor(p * 0.08);
-    float n = hash(cell + floor(t * 3.0));
+    // Wrap time to keep hash input small — avoids float precision degradation
+    // after hours of uptime. 256 cycles = ~85s period, invisible repeat.
+    float n = hash(cell + floor(mod(t * 3.0, 256.0)));
     return 0.85 + 0.15 * n;
 }
 
@@ -111,9 +113,10 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     }
 
     // ── Pulse modulation (lightsaber hum) ──
+    // Wrap phase to [0, 2pi) to preserve float precision over hours of uptime.
     float pulse = 1.0
-        + PULSE_AMOUNT * sin(iTime * PULSE_FREQ * 6.2832)
-        + PULSE_AMOUNT * 0.5 * sin(iTime * PULSE_DRIFT * 6.2832 + 1.0);
+        + PULSE_AMOUNT * sin(mod(iTime * PULSE_FREQ, 1.0) * 6.2832)
+        + PULSE_AMOUNT * 0.5 * sin(mod(iTime * PULSE_DRIFT, 1.0) * 6.2832 + 1.0);
 
     // ── Shimmer for organic feel ──
     float shim = shimmer(fragCoord, iTime);

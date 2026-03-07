@@ -73,7 +73,9 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     bloom = mix(bloom, bloom * frostTint, BLOOM_TINT);
 
     // ── Scan lines: faint horizontal lines drifting slowly ──
-    float scanY = fragCoord.y + iTime * SCAN_SPEED * iResolution.y;
+    // Wrap time offset to SCAN_PERIOD to avoid float precision loss at large iTime.
+    float scanOffset = mod(iTime * SCAN_SPEED * iResolution.y, SCAN_PERIOD);
+    float scanY = fragCoord.y + scanOffset;
     float scan = 1.0 - SCAN_INTENSITY * (0.5 + 0.5 * sin(scanY * 6.2832 / SCAN_PERIOD));
 
     // ── Vignette: soft edge darkening ──
@@ -83,7 +85,8 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     );
 
     // ── Pulse: barely-there breathing ──
-    float pulse = 1.0 + PULSE_AMOUNT * sin(iTime * PULSE_FREQ * 6.2832);
+    // Wrap phase to [0, 2pi) to preserve float precision over hours of uptime.
+    float pulse = 1.0 + PULSE_AMOUNT * sin(mod(iTime * PULSE_FREQ, 1.0) * 6.2832);
 
     // ── Composite ──
     vec3 color = original.rgb + bloom * BLOOM_INTENSITY * pulse;
