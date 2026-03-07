@@ -35,7 +35,9 @@ with lib; let
   # ── Derived shader values ────────────────────────────────────────
   builtinShaders =
     (lib.optional cfg.shaders.bloom ./shaders/bloom.glsl)
-    ++ (lib.optional cfg.shaders.cursorTrail ./shaders/cursor-trail.glsl);
+    ++ (lib.optional cfg.shaders.cursorTrail ./shaders/cursor-trail.glsl)
+    ++ (lib.optional cfg.shaders.filmGrain ./shaders/film-grain.glsl)
+    ++ (lib.optional cfg.shaders.chromaticAberration ./shaders/chromatic-aberration.glsl);
 
   allShaderPaths = builtinShaders ++ cfg.shaders.custom;
 
@@ -283,6 +285,18 @@ in {
         type = types.bool;
         default = false;
         description = "Enable cursor trail effect when cursor moves (requires visible terminal cursor)";
+      };
+
+      filmGrain = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Enable subtle animated film grain for organic screen texture";
+      };
+
+      chromaticAberration = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Enable subtle edge chromatic aberration for perceived depth";
       };
 
       animation = mkOption {
