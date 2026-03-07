@@ -1,7 +1,7 @@
 // Cursor aura — always-on lightsaber glow with trailing
 //
-// A soft light-blue aura that hugs the cursor at all times, pulses gently
-// like the hum of a lightsaber, and leaves a fading trail when it moves.
+// A concentrated light-blue aura that hugs the cursor at all times, pulses
+// with a slow lightsaber hum, and leaves a smooth fading trail when it moves.
 //
 // Coordinate convention (from Ghostty shadertoy_prefix.glsl):
 //   fragCoord and iCurrentCursor are in the SAME coordinate space.
@@ -15,26 +15,30 @@ const vec3 CORE_COLOR  = vec3(0.75, 0.92, 1.0);   // near-white cyan
 const vec3 MID_COLOR   = vec3(0.45, 0.72, 1.0);   // light frost blue
 const vec3 OUTER_COLOR = vec3(0.25, 0.50, 0.90);  // deeper blue haze
 
-// ─── Aura geometry ───────────────────────────────────────────────────
-const float CORE_RADIUS  = 8.0;    // tight bright core (pixels)
-const float MID_RADIUS   = 22.0;   // close mid glow
-const float OUTER_RADIUS = 55.0;   // subtle outer haze
+// ─── Aura geometry (concentrated) ────────────────────────────────────
+const float CORE_RADIUS  = 5.0;    // tight bright core (pixels)
+const float MID_RADIUS   = 14.0;   // close mid glow
+const float OUTER_RADIUS = 32.0;   // compact outer haze
 
 // ─── Aura intensity ──────────────────────────────────────────────────
-const float CORE_INTENSITY  = 0.85;  // concentrated core brightness
-const float MID_INTENSITY   = 0.12;  // subtle mid ring
-const float OUTER_INTENSITY = 0.04;  // barely-there outer haze
+const float CORE_INTENSITY  = 0.95;  // concentrated core brightness
+const float MID_INTENSITY   = 0.18;  // subtle mid ring
+const float OUTER_INTENSITY = 0.03;  // barely-there outer haze
 
-// ─── Pulse (lightsaber hum) ──────────────────────────────────────────
-const float PULSE_FREQ   = 2.5;   // hum frequency (Hz)
-const float PULSE_AMOUNT = 0.05;  // intensity modulation depth
-const float PULSE_DRIFT  = 0.7;   // secondary slow drift frequency
+// ─── Pulse (lightsaber hum — slower, deeper) ─────────────────────────
+const float PULSE_FREQ   = 1.8;   // hum frequency (Hz)
+const float PULSE_AMOUNT = 0.06;  // intensity modulation depth
+const float PULSE_DRIFT  = 0.4;   // secondary slow drift frequency
 
-// ─── Trail parameters ────────────────────────────────────────────────
-const float TRAIL_DURATION   = 0.40;  // trail fade time (seconds)
-const float TRAIL_WIDTH      = 12.0;  // thin trail saber width (pixels)
-const float TRAIL_INTENSITY  = 0.30;  // trail peak brightness (concentrated)
-const float TRAIL_HEAD_BIAS  = 0.8;   // head-to-tail brightness ratio
+// ─── Trail parameters (longer, smoother) ─────────────────────────────
+const float TRAIL_DURATION   = 0.65;  // trail fade time (seconds)
+const float TRAIL_WIDTH      = 8.0;   // thin trail saber width (pixels)
+const float TRAIL_INTENSITY  = 0.35;  // trail peak brightness
+const float TRAIL_HEAD_BIAS  = 0.85;  // head-to-tail brightness ratio
+
+// ─── Smooth follow ──────────────────────────────────────────────────
+// Controls how slowly the aura follows the cursor for saber-like rhythm.
+const float FOLLOW_SPEED = 3.5;    // lower = slower/smoother following
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -45,9 +49,16 @@ vec2 cursorCellCenter(vec4 c) {
     return c.xy + vec2(c.z * 0.5, -c.w * 0.5);
 }
 
+// Smooth ease-out for trail animation
 float easeOut(float t) {
     float inv = 1.0 - t;
     return 1.0 - inv * inv * inv;
+}
+
+// Slower ease-out for the aura follow — gives the lightsaber weight
+float easeOutSlow(float t) {
+    float inv = 1.0 - t;
+    return 1.0 - inv * inv * inv * inv * inv;  // quintic
 }
 
 // Signed distance from point p to line segment (a, b), returns (dist, t)
@@ -81,11 +92,15 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec2 cursorCenter = cursorCellCenter(iCurrentCursor);
     vec2 prevCenter   = cursorCellCenter(iPreviousCursor);
 
-    // ── Distance from fragment to cursor ──
-    float dist = length(fragCoord - cursorCenter);
+    // ── Smooth follow: the aura lags behind the actual cursor ──
+    float dt = iTime - iTimeCursorChange;
+    float followT = 1.0 - exp(-FOLLOW_SPEED * dt);
+    vec2 auraCenter = mix(prevCenter, cursorCenter, easeOutSlow(followT));
+
+    // ── Distance from fragment to aura center ──
+    float dist = length(fragCoord - auraCenter);
 
     // ── Early exit: too far from both aura and any possible trail ──
-    float dt = iTime - iTimeCursorChange;
     float trailProgress = clamp(dt / TRAIL_DURATION, 0.0, 1.0);
     float moveDistance = length(cursorCenter - prevCenter);
     float maxReach = OUTER_RADIUS + moveDistance + TRAIL_WIDTH;
@@ -103,7 +118,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     // ── Shimmer for organic feel ──
     float shim = shimmer(fragCoord, iTime);
 
-    // ── Always-on radial aura ──
+    // ── Always-on radial aura (centered on smooth-followed position) ──
     float auraGlow = 0.0;
     vec3 auraColor = vec3(0.0);
 
@@ -118,7 +133,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     auraGlow += midGlow;
 
     // Outer layer — deep blue haze, gaussian-ish falloff
-    float outerFactor = exp(-2.0 * (dist * dist) / (OUTER_RADIUS * OUTER_RADIUS));
+    float outerFactor = exp(-2.5 * (dist * dist) / (OUTER_RADIUS * OUTER_RADIUS));
     float outerGlow = OUTER_INTENSITY * outerFactor;
     auraColor += OUTER_COLOR * outerGlow;
     auraGlow += outerGlow;
@@ -132,11 +147,11 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     float trailGlow = 0.0;
 
     if (trailProgress < 1.0 && moveDistance > 1.0) {
-        // Animated head/tail positions
-        float headProg = easeOut(min(trailProgress * 2.5, 1.0));
+        // Animated head/tail positions — slower easing for saber rhythm
+        float headProg = easeOutSlow(min(trailProgress * 2.0, 1.0));
         vec2 headPos = mix(prevCenter, cursorCenter, headProg);
 
-        float tailProg = easeOut(max((trailProgress - 0.1) * 2.0, 0.0));
+        float tailProg = easeOut(max((trailProgress - 0.15) * 1.8, 0.0));
         vec2 tailPos = mix(prevCenter, cursorCenter, tailProg);
 
         // Distance from fragment to trail segment
