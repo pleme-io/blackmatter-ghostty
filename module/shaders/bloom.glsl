@@ -1,51 +1,95 @@
-// Subtle bloom glow effect for Ghostty terminal
-// Applies a soft golden-ratio gaussian bloom to bright pixels
-// Shadertoy-compatible: uses iTime, iResolution, iChannel0
+// Nord Frost — subtle text bloom + scan lines + vignette
+//
+// Content-reactive shader that works in every context (shell, TUI, Claude Code).
+// Uses only iChannel0 (screen texture), iTime, and iResolution — no cursor
+// uniforms. Bright text gets a soft Nord frost-blue bloom; faint scan lines
+// and edge vignette add depth without interfering with readability.
+
+// ─── Nord frost palette ──────────────────────────────────────────────
+const vec3 FROST_CYAN  = vec3(0.55, 0.83, 0.93);  // nord8 — primary accent
+const vec3 FROST_BLUE  = vec3(0.32, 0.60, 0.86);  // nord9 — deeper frost
+const vec3 FROST_ICE   = vec3(0.70, 0.88, 1.00);  // bright ice highlight
+
+// ─── Bloom parameters ────────────────────────────────────────────────
+const float BLOOM_THRESHOLD  = 0.55;   // luminance threshold to bloom
+const float BLOOM_INTENSITY  = 0.10;   // overall bloom brightness
+const float BLOOM_RADIUS     = 3.5;    // sample spread (pixels)
+const float BLOOM_TINT       = 0.25;   // how much Nord frost tints the bloom (0=none, 1=full)
+const int   BLOOM_SAMPLES    = 14;     // golden-spiral sample count
+
+// ─── Scan lines ──────────────────────────────────────────────────────
+const float SCAN_INTENSITY   = 0.025;  // barely visible
+const float SCAN_SPEED       = 0.08;   // very slow drift (pixels/sec)
+const float SCAN_PERIOD      = 4.0;    // pixels between lines
+
+// ─── Vignette ────────────────────────────────────────────────────────
+const float VIGNETTE_STRENGTH = 0.18;  // max darkening at corners
+const float VIGNETTE_SOFTNESS = 0.45;  // how far in the effect reaches
+
+// ─── Pulse ───────────────────────────────────────────────────────────
+const float PULSE_FREQ   = 0.3;   // very slow breathing
+const float PULSE_AMOUNT = 0.015; // barely perceptible intensity shift
+
+// ─── Helpers ─────────────────────────────────────────────────────────
+
+float luminance(vec3 c) {
+    return dot(c, vec3(0.2126, 0.7152, 0.0722));
+}
+
+// ─── Main ────────────────────────────────────────────────────────────
 
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec2 uv = fragCoord / iResolution.xy;
     vec4 original = texture(iChannel0, uv);
+    float luma = luminance(original.rgb);
 
-    // Bloom parameters
-    const float threshold = 0.7;
-    const float intensity = 0.15;
-    const float radius = 3.0;
-    const float goldenAngle = 2.39996323;
-
-    // Calculate luminance of center pixel
-    float luma = dot(original.rgb, vec3(0.2126, 0.7152, 0.0722));
-
-    // Only bloom bright pixels (text glow)
-    if (luma < threshold) {
-        fragColor = original;
-        return;
-    }
-
-    // Golden-ratio spiral gaussian kernel
+    // ── Bloom: golden-ratio spiral gaussian on bright text ──
     vec3 bloom = vec3(0.0);
     float totalWeight = 0.0;
     vec2 texelSize = 1.0 / iResolution.xy;
+    const float goldenAngle = 2.39996323;
 
-    for (int i = 0; i < 12; i++) {
+    for (int i = 0; i < BLOOM_SAMPLES; i++) {
         float fi = float(i);
         float angle = fi * goldenAngle;
-        float dist = sqrt(fi + 0.5) * radius;
+        float dist = sqrt(fi + 0.5) * BLOOM_RADIUS;
         vec2 offset = vec2(cos(angle), sin(angle)) * dist * texelSize;
 
-        // Gaussian weight based on distance
-        float weight = exp(-0.5 * (dist * dist) / (radius * radius));
-        vec3 sample_color = texture(iChannel0, uv + offset).rgb;
-        float sampleLuma = dot(sample_color, vec3(0.2126, 0.7152, 0.0722));
+        float weight = exp(-0.5 * (dist * dist) / (BLOOM_RADIUS * BLOOM_RADIUS));
+        vec3 s = texture(iChannel0, uv + offset).rgb;
+        float sLuma = luminance(s);
 
-        // Only accumulate bright samples
-        bloom += sample_color * weight * smoothstep(threshold - 0.1, threshold, sampleLuma);
+        // Only accumulate bright neighbours
+        float contrib = smoothstep(BLOOM_THRESHOLD - 0.1, BLOOM_THRESHOLD, sLuma);
+        bloom += s * weight * contrib;
         totalWeight += weight;
     }
-
     bloom /= max(totalWeight, 1.0);
 
-    // Subtle time-based pulse (barely perceptible warmth)
-    float pulse = 1.0 + 0.02 * sin(iTime * 0.5);
+    // Tint bloom toward Nord frost — blue-cyan shift on bright text
+    vec3 frostTint = mix(FROST_CYAN, FROST_ICE, luma);
+    bloom = mix(bloom, bloom * frostTint, BLOOM_TINT);
 
-    fragColor = vec4(original.rgb + bloom * intensity * pulse, original.a);
+    // ── Scan lines: faint horizontal lines drifting slowly ──
+    float scanY = fragCoord.y + iTime * SCAN_SPEED * iResolution.y;
+    float scan = 1.0 - SCAN_INTENSITY * (0.5 + 0.5 * sin(scanY * 6.2832 / SCAN_PERIOD));
+
+    // ── Vignette: soft edge darkening ──
+    vec2 centered = uv - 0.5;
+    float vignette = 1.0 - VIGNETTE_STRENGTH * smoothstep(
+        VIGNETTE_SOFTNESS, 1.0, length(centered) * 1.6
+    );
+
+    // ── Pulse: barely-there breathing ──
+    float pulse = 1.0 + PULSE_AMOUNT * sin(iTime * PULSE_FREQ * 6.2832);
+
+    // ── Composite ──
+    // Only add bloom where text is bright enough — preserve dark regions
+    float bloomMask = smoothstep(BLOOM_THRESHOLD - 0.15, BLOOM_THRESHOLD + 0.1, luma);
+    vec3 color = original.rgb + bloom * BLOOM_INTENSITY * bloomMask * pulse;
+
+    // Apply scan lines and vignette
+    color *= scan * vignette;
+
+    fragColor = vec4(color, original.a);
 }

@@ -281,8 +281,8 @@ in {
 
       cursorTrail = mkOption {
         type = types.bool;
-        default = true;
-        description = "Enable cursor trail effect when cursor moves";
+        default = false;
+        description = "Enable cursor trail effect when cursor moves (requires visible terminal cursor)";
       };
 
       animation = mkOption {
