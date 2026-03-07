@@ -151,7 +151,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
         float headProg = easeOutSlow(min(trailProgress * 2.0, 1.0));
         vec2 headPos = mix(prevCenter, cursorCenter, headProg);
 
-        float tailProg = easeOut(max((trailProgress - 0.15) * 1.8, 0.0));
+        float tailProg = easeOut(clamp((trailProgress - 0.15) * 1.8, 0.0, 1.0));
         vec2 tailPos = mix(prevCenter, cursorCenter, tailProg);
 
         // Distance from fragment to trail segment
