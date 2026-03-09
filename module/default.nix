@@ -42,6 +42,46 @@ with lib; let
 
   allShaderPaths = builtinShaders ++ cfg.shaders.custom;
 
+  # ── Debug overrides: cranked-up values for visual verification ──
+  debugOverrides = {
+    "bloom.glsl" = builtins.replaceStrings
+      [
+        "BLOOM_INTENSITY  = 0.12"
+        "BLOOM_RADIUS     = 3.5"
+        "SCAN_INTENSITY   = 0.025"
+        "VIGNETTE_STRENGTH = 0.18"
+        "PULSE_AMOUNT = 0.015"
+      ]
+      [
+        "BLOOM_INTENSITY  = 0.80"
+        "BLOOM_RADIUS     = 12.0"
+        "SCAN_INTENSITY   = 0.20"
+        "VIGNETTE_STRENGTH = 0.60"
+        "PULSE_AMOUNT = 0.12"
+      ]
+      (builtins.readFile ./shaders/bloom.glsl);
+
+    "film-grain.glsl" = builtins.replaceStrings
+      [ "GRAIN_INTENSITY  = 0.025" "FROST_TINT       = 0.15" ]
+      [ "GRAIN_INTENSITY  = 0.25"  "FROST_TINT       = 0.80" ]
+      (builtins.readFile ./shaders/film-grain.glsl);
+
+    "chromatic-aberration.glsl" = builtins.replaceStrings
+      [ "MAX_OFFSET    = 1.5" "FROST_SHIFT   = 0.12" ]
+      [ "MAX_OFFSET    = 10.0" "FROST_SHIFT   = 0.50" ]
+      (builtins.readFile ./shaders/chromatic-aberration.glsl);
+
+    "cursor-trail.glsl" = builtins.replaceStrings
+      [ "CORE_INTENSITY  = 0.95" "MID_INTENSITY   = 0.18" "OUTER_RADIUS = 32.0" ]
+      [ "CORE_INTENSITY  = 1.0"  "MID_INTENSITY   = 0.50" "OUTER_RADIUS = 60.0" ]
+      (builtins.readFile ./shaders/cursor-trail.glsl);
+
+    "prompt-saber.glsl" = builtins.replaceStrings
+      [ "CORE_INTENSITY  = 0.80" "INNER_INTENSITY = 0.20" "OUTER_HALF  = 18.0" "FOCAL_INTENSITY = 0.12" ]
+      [ "CORE_INTENSITY  = 1.0"  "INNER_INTENSITY = 0.50" "OUTER_HALF  = 35.0" "FOCAL_INTENSITY = 0.30" ]
+      (builtins.readFile ./shaders/prompt-saber.glsl);
+  };
+
   # ── Derived keybinding values ────────────────────────────────────
   promptNavBinds = lib.optionals cfg.keybindings.promptNavigation [
     "cmd+up=jump_to_prompt:-1"
@@ -306,6 +346,12 @@ in {
         description = "Enable subtle edge chromatic aberration for perceived depth";
       };
 
+      debug = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Crank all shader effects to exaggerated levels for visual verification";
+      };
+
       animation = mkOption {
         type = types.bool;
         default = true;
@@ -384,11 +430,15 @@ in {
     })
 
     # Deploy shader files to ~/.config/ghostty/shaders/
+    # In debug mode, swap in cranked-up values via builtins.replaceStrings.
     (mkIf cfg.shaders.enable {
-      home.file = lib.listToAttrs (map (path:
-        lib.nameValuePair
-          ".config/ghostty/shaders/${builtins.baseNameOf (toString path)}"
-          { source = path; }
+      home.file = lib.listToAttrs (map (path: let
+        name = builtins.baseNameOf (toString path);
+        debugContent = debugOverrides.${name} or null;
+        useDebug = cfg.shaders.debug && debugContent != null;
+      in lib.nameValuePair
+        ".config/ghostty/shaders/${name}"
+        (if useDebug then { text = debugContent; } else { source = path; })
       ) builtinShaders);
     })
 
