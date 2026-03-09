@@ -36,6 +36,7 @@ with lib; let
   builtinShaders =
     (lib.optional cfg.shaders.bloom ./shaders/bloom.glsl)
     ++ (lib.optional cfg.shaders.cursorTrail ./shaders/cursor-trail.glsl)
+    ++ (lib.optional cfg.shaders.promptSaber ./shaders/prompt-saber.glsl)
     ++ (lib.optional cfg.shaders.filmGrain ./shaders/film-grain.glsl)
     ++ (lib.optional cfg.shaders.chromaticAberration ./shaders/chromatic-aberration.glsl);
 
@@ -285,6 +286,12 @@ in {
         type = types.bool;
         default = false;
         description = "Enable cursor trail effect when cursor moves (requires visible terminal cursor)";
+      };
+
+      promptSaber = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable lightsaber glow under the shell prompt line (auto-detects prompt vs TUI apps)";
       };
 
       filmGrain = mkOption {
