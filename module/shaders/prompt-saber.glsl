@@ -23,14 +23,14 @@ const vec3 OUTER_COLOR = vec3(0.25, 0.45, 0.82);   // deep blue ambient haze
 
 // ─── Beam geometry ─────────────────────────────────────────────────
 const float CORE_HALF   = 1.5;    // half-height of bright core (pixels)
-const float INNER_HALF  = 6.0;    // half-height of inner glow
-const float OUTER_HALF  = 18.0;   // half-height of outer haze
+const float INNER_HALF  = 8.0;    // half-height of inner glow
+const float OUTER_HALF  = 24.0;   // half-height of outer haze
 const float BEAM_OFFSET = 1.0;    // gap below cursor cell bottom edge (pixels)
 
 // ─── Intensity ─────────────────────────────────────────────────────
-const float CORE_INTENSITY  = 0.80;   // plasma core brightness
-const float INNER_INTENSITY = 0.20;   // containment glow brightness
-const float OUTER_INTENSITY = 0.035;  // ambient haze brightness
+const float CORE_INTENSITY  = 0.85;   // plasma core brightness
+const float INNER_INTENSITY = 0.28;   // containment glow brightness
+const float OUTER_INTENSITY = 0.055;  // ambient haze brightness
 
 // ─── Cursor focal bloom ───────────────────────────────────────────
 // Brighter spot under the cursor — the blade's active point.

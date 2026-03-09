@@ -11,9 +11,9 @@ const vec3 FROST_ICE   = vec3(0.70, 0.88, 1.00);  // bright ice highlight
 
 // ─── Bloom parameters ────────────────────────────────────────────────
 const float BLOOM_THRESHOLD  = 0.55;   // luminance threshold for source pixels
-const float BLOOM_INTENSITY  = 0.12;   // overall bloom brightness
-const float BLOOM_RADIUS     = 3.5;    // sample spread (pixels)
-const float BLOOM_TINT       = 0.30;   // Nord frost tint strength (0=none, 1=full)
+const float BLOOM_INTENSITY  = 0.20;   // overall bloom brightness
+const float BLOOM_RADIUS     = 5.0;    // sample spread (pixels)
+const float BLOOM_TINT       = 0.35;   // Nord frost tint strength (0=none, 1=full)
 const int   BLOOM_SAMPLES    = 14;     // golden-spiral sample count
 
 // ─── Scan lines ──────────────────────────────────────────────────────

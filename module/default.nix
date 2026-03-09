@@ -46,8 +46,8 @@ with lib; let
   debugOverrides = {
     "bloom.glsl" = builtins.replaceStrings
       [
-        "BLOOM_INTENSITY  = 0.12"
-        "BLOOM_RADIUS     = 3.5"
+        "BLOOM_INTENSITY  = 0.20"
+        "BLOOM_RADIUS     = 5.0"
         "SCAN_INTENSITY   = 0.025"
         "VIGNETTE_STRENGTH = 0.18"
         "PULSE_AMOUNT = 0.015"
@@ -77,7 +77,7 @@ with lib; let
       (builtins.readFile ./shaders/cursor-trail.glsl);
 
     "prompt-saber.glsl" = builtins.replaceStrings
-      [ "CORE_INTENSITY  = 0.80" "INNER_INTENSITY = 0.20" "OUTER_HALF  = 18.0" "FOCAL_INTENSITY = 0.12" ]
+      [ "CORE_INTENSITY  = 0.85" "INNER_INTENSITY = 0.28" "OUTER_HALF  = 24.0" "FOCAL_INTENSITY = 0.12" ]
       [ "CORE_INTENSITY  = 1.0"  "INNER_INTENSITY = 0.50" "OUTER_HALF  = 35.0" "FOCAL_INTENSITY = 0.30" ]
       (builtins.readFile ./shaders/prompt-saber.glsl);
   };
