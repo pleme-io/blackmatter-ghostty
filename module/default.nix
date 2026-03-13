@@ -33,13 +33,20 @@ with lib; let
   };
 
   # ── Derived shader values ────────────────────────────────────────
+  # Order matters: each shader's output feeds the next as iChannel0.
+  # Geometric → content → cursor → spatial → color → atmosphere → noise
   builtinShaders =
-    (lib.optional cfg.shaders.bloom ./shaders/bloom.glsl)
+    (lib.optional cfg.shaders.screenCurvature ./shaders/screen-curvature.glsl)
+    ++ (lib.optional cfg.shaders.bloom ./shaders/bloom.glsl)
+    ++ (lib.optional cfg.shaders.backgroundPulse ./shaders/background-pulse.glsl)
     ++ (lib.optional cfg.shaders.cursorGlow ./shaders/cursor-glow.glsl)
     ++ (lib.optional cfg.shaders.cursorTrail ./shaders/cursor-trail.glsl)
     ++ (lib.optional cfg.shaders.promptSaber ./shaders/prompt-saber.glsl)
-    ++ (lib.optional cfg.shaders.filmGrain ./shaders/film-grain.glsl)
-    ++ (lib.optional cfg.shaders.chromaticAberration ./shaders/chromatic-aberration.glsl);
+    ++ (lib.optional cfg.shaders.sonicBoom ./shaders/sonic-boom.glsl)
+    ++ (lib.optional cfg.shaders.spotlight ./shaders/spotlight.glsl)
+    ++ (lib.optional cfg.shaders.chromaticAberration ./shaders/chromatic-aberration.glsl)
+    ++ (lib.optional cfg.shaders.frostHaze ./shaders/frost-haze.glsl)
+    ++ (lib.optional cfg.shaders.filmGrain ./shaders/film-grain.glsl);
 
   allShaderPaths = builtinShaders ++ cfg.shaders.custom;
 
@@ -86,6 +93,31 @@ with lib; let
       [ "CORE_INTENSITY  = 0.85" "INNER_INTENSITY = 0.28" "OUTER_HALF  = 24.0" "FOCAL_INTENSITY = 0.12" ]
       [ "CORE_INTENSITY  = 1.0"  "INNER_INTENSITY = 0.50" "OUTER_HALF  = 35.0" "FOCAL_INTENSITY = 0.30" ]
       (builtins.readFile ./shaders/prompt-saber.glsl);
+
+    "spotlight.glsl" = builtins.replaceStrings
+      [ "DIM_AMOUNT    = 0.10" "INNER_RADIUS  = 250.0" "OUTER_RADIUS  = 900.0" ]
+      [ "DIM_AMOUNT    = 0.40" "INNER_RADIUS  = 150.0" "OUTER_RADIUS  = 500.0" ]
+      (builtins.readFile ./shaders/spotlight.glsl);
+
+    "screen-curvature.glsl" = builtins.replaceStrings
+      [ "CURVATURE     = 0.012" "CORNER_DARK   = 0.025" ]
+      [ "CURVATURE     = 0.06"  "CORNER_DARK   = 0.15" ]
+      (builtins.readFile ./shaders/screen-curvature.glsl);
+
+    "background-pulse.glsl" = builtins.replaceStrings
+      [ "INTENSITY     = 0.015" "CYCLE_SPEED   = 0.08" ]
+      [ "INTENSITY     = 0.12"  "CYCLE_SPEED   = 0.5" ]
+      (builtins.readFile ./shaders/background-pulse.glsl);
+
+    "frost-haze.glsl" = builtins.replaceStrings
+      [ "HAZE_OPACITY  = 0.035" "EDGE_START    = 0.55" ]
+      [ "HAZE_OPACITY  = 0.25"  "EDGE_START    = 0.30" ]
+      (builtins.readFile ./shaders/frost-haze.glsl);
+
+    "sonic-boom.glsl" = builtins.replaceStrings
+      [ "RING_INTENSITY = 0.08" "RING_WIDTH    = 4.0" "RING_DURATION = 0.35" ]
+      [ "RING_INTENSITY = 0.40" "RING_WIDTH    = 8.0" "RING_DURATION = 0.8" ]
+      (builtins.readFile ./shaders/sonic-boom.glsl);
   };
 
   # ── Derived keybinding values ────────────────────────────────────
@@ -356,6 +388,36 @@ in {
         type = types.bool;
         default = true;
         description = "Enable subtle edge chromatic aberration for perceived depth";
+      };
+
+      spotlight = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable soft cursor-centered spotlight that dims distant areas (reading lamp effect)";
+      };
+
+      screenCurvature = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable subtle barrel distortion for CRT-like display depth";
+      };
+
+      backgroundPulse = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable ultra-slow Nord frost color breathing on dark background areas";
+      };
+
+      frostHaze = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable atmospheric frost condensation veil at screen edges";
+      };
+
+      sonicBoom = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable expanding ripple ring when cursor arrives at a new position";
       };
 
       debug = mkOption {
