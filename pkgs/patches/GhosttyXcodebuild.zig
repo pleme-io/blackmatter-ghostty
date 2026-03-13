@@ -93,6 +93,7 @@ pub fn init(
 
         if (xc_arch) |arch| step.addArgs(&.{ "-arch", arch });
 
+
         // Add vendored Sparkle framework search path so the compiler
         // and linker can find Sparkle.framework without SPM resolution.
         if (sparkle_path) |path| {

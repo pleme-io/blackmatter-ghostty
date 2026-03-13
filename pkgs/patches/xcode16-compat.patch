@@ -1,0 +1,191 @@
+diff --git a/macos/Sources/Features/Custom App Icon/DockTilePlugin.swift b/macos/Sources/Features/Custom App Icon/DockTilePlugin.swift
+index 990cd8b..23a7ea8 100644
+--- a/macos/Sources/Features/Custom App Icon/DockTilePlugin.swift	
++++ b/macos/Sources/Features/Custom App Icon/DockTilePlugin.swift	
+@@ -126,7 +126,7 @@ class DockTilePlugin: NSObject, NSDockTilePlugIn {
+ }
+ 
+ private extension NSDockTile {
+-    func setIcon(_ newIcon: NSImage) {
++    func setIcon(_ newIcon: sending NSImage) {
+         // Update the Dock tile on the main thread.
+         DispatchQueue.main.async {
+             let iconView = NSImageView(frame: CGRect(origin: .zero, size: self.size))
+diff --git a/macos/Sources/Ghostty/Surface View/SurfaceView.swift b/macos/Sources/Ghostty/Surface View/SurfaceView.swift
+index 47503dc..a1c9b11 100644
+--- a/macos/Sources/Ghostty/Surface View/SurfaceView.swift	
++++ b/macos/Sources/Ghostty/Surface View/SurfaceView.swift	
+@@ -409,73 +409,83 @@ extension Ghostty {
+ 
+         private let padding: CGFloat = 8
+ 
+-        var body: some View {
+-            GeometryReader { geo in
+-                HStack(spacing: 4) {
+-                    TextField("Search", text: $searchState.needle)
+-                    .textFieldStyle(.plain)
+-                    .frame(width: 180)
+-                    .padding(.leading, 8)
+-                    .padding(.trailing, 50)
+-                    .padding(.vertical, 6)
+-                    .background(Color.primary.opacity(0.1))
+-                    .cornerRadius(6)
+-                    .focused($isSearchFieldFocused)
+-                    .overlay(alignment: .trailing) {
+-                        if let selected = searchState.selected {
+-                            Text("\(selected + 1)/\(searchState.total, default: "?")")
+-                                .font(.caption)
+-                                .foregroundColor(.secondary)
+-                                .monospacedDigit()
+-                                .padding(.trailing, 8)
+-                        } else if let total = searchState.total {
+-                            Text("-/\(total)")
+-                                .font(.caption)
+-                                .foregroundColor(.secondary)
+-                                .monospacedDigit()
+-                                .padding(.trailing, 8)
+-                        }
+-                    }
++        // Extracted to help Swift type-checker with complex view builder
++        private var searchField: some View {
++            TextField("Search", text: $searchState.needle)
++            .textFieldStyle(.plain)
++            .frame(width: 180)
++            .padding(.leading, 8)
++            .padding(.trailing, 50)
++            .padding(.vertical, 6)
++            .background(Color.primary.opacity(0.1))
++            .cornerRadius(6)
++            .focused($isSearchFieldFocused)
++            .overlay(alignment: .trailing) {
++                if let selected = searchState.selected {
++                    Text("\(selected + 1)/\(searchState.total.map(String.init) ?? "?")")
++                        .font(.caption)
++                        .foregroundColor(.secondary)
++                        .monospacedDigit()
++                        .padding(.trailing, 8)
++                } else if let total = searchState.total {
++                    Text("-/\(total)")
++                        .font(.caption)
++                        .foregroundColor(.secondary)
++                        .monospacedDigit()
++                        .padding(.trailing, 8)
++                }
++            }
+ #if canImport(AppKit)
+-                    .onExitCommand {
+-                        if searchState.needle.isEmpty {
+-                            onClose()
+-                        } else {
+-                            Ghostty.moveFocus(to: surfaceView)
+-                        }
+-                    }
++            .onExitCommand {
++                if searchState.needle.isEmpty {
++                    onClose()
++                } else {
++                    Ghostty.moveFocus(to: surfaceView)
++                }
++            }
+ #endif
+-                    .backport.onKeyPress(.return) { modifiers in
+-                        guard let surface = surfaceView.surface else { return .ignored }
+-                        let action = modifiers.contains(.shift)
+-                        ? "navigate_search:previous"
+-                        : "navigate_search:next"
+-                        ghostty_surface_binding_action(surface, action, UInt(action.lengthOfBytes(using: .utf8)))
+-                        return .handled
+-                    }
++            .backport.onKeyPress(.return) { modifiers in
++                guard let surface = surfaceView.surface else { return .ignored }
++                let action = modifiers.contains(.shift)
++                ? "navigate_search:previous"
++                : "navigate_search:next"
++                ghostty_surface_binding_action(surface, action, UInt(action.lengthOfBytes(using: .utf8)))
++                return .handled
++            }
++        }
+ 
+-                    Button(action: {
+-                        guard let surface = surfaceView.surface else { return }
+-                        let action = "navigate_search:next"
+-                        ghostty_surface_binding_action(surface, action, UInt(action.lengthOfBytes(using: .utf8)))
+-                    }, label: {
+-                        Image(systemName: "chevron.up")
+-                    })
+-                    .buttonStyle(SearchButtonStyle())
+-
+-                    Button(action: {
+-                        guard let surface = surfaceView.surface else { return }
+-                        let action = "navigate_search:previous"
+-                        ghostty_surface_binding_action(surface, action, UInt(action.lengthOfBytes(using: .utf8)))
+-                    }, label: {
+-                        Image(systemName: "chevron.down")
+-                    })
+-                    .buttonStyle(SearchButtonStyle())
+-
+-                    Button(action: onClose) {
+-                        Image(systemName: "xmark")
+-                    }
+-                    .buttonStyle(SearchButtonStyle())
++        private var navigationButtons: some View {
++            HStack(spacing: 4) {
++                Button(action: {
++                    guard let surface = surfaceView.surface else { return }
++                    let action = "navigate_search:next"
++                    ghostty_surface_binding_action(surface, action, UInt(action.lengthOfBytes(using: .utf8)))
++                }, label: {
++                    Image(systemName: "chevron.up")
++                })
++                .buttonStyle(SearchButtonStyle())
++
++                Button(action: {
++                    guard let surface = surfaceView.surface else { return }
++                    let action = "navigate_search:previous"
++                    ghostty_surface_binding_action(surface, action, UInt(action.lengthOfBytes(using: .utf8)))
++                }, label: {
++                    Image(systemName: "chevron.down")
++                })
++                .buttonStyle(SearchButtonStyle())
++
++                Button(action: onClose) {
++                    Image(systemName: "xmark")
++                }
++                .buttonStyle(SearchButtonStyle())
++            }
++        }
++
++        var body: some View {
++            GeometryReader { geo in
++                HStack(spacing: 4) {
++                    searchField
++                    navigationButtons
+                 }
+                 .padding(8)
+                 .background(.background)
+@@ -522,11 +532,7 @@ extension Ghostty {
+         }
+ 
+         private var clipShape: some Shape {
+-            if #available(iOS 26.0, macOS 26.0, *) {
+-                return ConcentricRectangle(corners: .concentric(minimum: 8), isUniform: true)
+-            } else {
+-                return RoundedRectangle(cornerRadius: 8)
+-            }
++            return RoundedRectangle(cornerRadius: 8)
+         }
+ 
+         enum Corner {
+diff --git a/macos/Sources/Helpers/Backport.swift b/macos/Sources/Helpers/Backport.swift
+index e2afb5b..aa41ad4 100644
+--- a/macos/Sources/Helpers/Backport.swift
++++ b/macos/Sources/Helpers/Backport.swift
+@@ -121,7 +121,7 @@ enum BackportPointerStyle {
+ enum BackportNSGlassStyle {
+     case regular, clear
+ 
+-    #if canImport(AppKit)
++    #if canImport(AppKit) && compiler(>=6.2)
+     @available(macOS 26, *)
+     var official: NSGlassEffectView.Style {
+         switch self {

@@ -227,13 +227,30 @@ Checks verify:
 - Keybinding configuration evaluates
 - `darwin.useSourceBuild` option works (Darwin only)
 
+## Tested Platforms
+
+The macOS source build has been tested on:
+
+| Node | Hardware | Arch | macOS | Xcode | System Swift | Nix Swift Toolchain |
+|------|----------|------|-------|-------|-------------|-------------------|
+| cid  | MacBook Pro M1 Max | aarch64-darwin | 15.x | 16.x | 6.x | 6.2.4 |
+| ryn  | MacBook Pro M4 Pro (48GB) | aarch64-darwin | 15.3.1 | 16.4 (16F6) | 6.1.2 | 6.2.4 |
+
+**Minimum requirements:** Xcode 16.0+, macOS on aarch64-darwin or x86_64-darwin. The build
+detects the platform, Xcode version, macOS version, and Swift version at the start of the
+build phase and errors out early with a clear message if requirements are not met.
+
+The build uses the **nix-provided Swift 6.2.4 toolchain** via `SWIFT_EXEC`, making it
+independent of the system Xcode Swift version. Any Xcode that provides the macOS SDK
+and Metal toolchain should work.
+
 ## Source Build Patches
 
 The macOS source build applies four patches to upstream Ghostty:
 
 1. **GhosttyXCFramework.zig** — skips iOS/iOS Simulator targets for native-only builds
 2. **MetallibStep.zig** — invokes `metal`/`metallib` directly from PATH instead of via `xcrun` (required because `xcrun` cannot execute cryptex-mounted binaries inside the Nix sandbox)
-3. **GhosttyXcodebuild.zig** — passes through environment variables (HOME, DEVELOPER_DIR, TMPDIR, PATH) to xcodebuild and adds vendored Sparkle framework search paths
+3. **GhosttyXcodebuild.zig** — passes through environment variables (HOME, DEVELOPER_DIR, TMPDIR, PATH, SWIFT_EXEC) to xcodebuild and adds vendored Sparkle framework search paths. SWIFT_EXEC ensures the nix-provided Swift compiler is used instead of the Xcode-bundled one.
 4. **pbxproj strip-spm** — removes Sparkle SPM dependency from the Xcode project (SwiftPM calls `/usr/bin/sandbox-exec` which the Nix daemon user cannot use)
 
 Sparkle is vendored as an xcframework and embedded during the install phase.

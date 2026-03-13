@@ -43,10 +43,14 @@ mkZigSwiftApp {
   # Patch 4: Remove Sparkle SPM dependency — SwiftPM calls /usr/bin/sandbox-exec
   #   (absolute path) during package resolution, and the Nix daemon user can't
   #   use sandbox-exec. We vendor Sparkle.xcframework and pass it via build settings.
+  # Patch 5: Xcode 16.x compatibility — macOS 26 APIs (NSGlassEffectView,
+  #   ConcentricRectangle) don't exist in Xcode 16.x SDK. Also fixes Swift 6
+  #   strict concurrency 'sending' error in DockTilePlugin.
   postPatch = ''
     cp ${./patches/GhosttyXCFramework.zig} src/build/GhosttyXCFramework.zig
     cp ${./patches/MetallibStep.zig} src/build/MetallibStep.zig
     cp ${./patches/GhosttyXcodebuild.zig} src/build/GhosttyXcodebuild.zig
+    patch -p1 < ${./patches/xcode16-compat.patch}
 
     nix-macos pbxproj strip-spm macos/Ghostty.xcodeproj/project.pbxproj
 
@@ -61,6 +65,58 @@ mkZigSwiftApp {
     runHook preBuild
 
     eval "$(nix-macos env)"
+
+    # --- Platform detection and early error reporting ---
+    echo "ghostty-darwin: detecting build platform..."
+
+    # 1. Platform check
+    nixSystem="${pkgs.stdenv.hostPlatform.system}"
+    case "$nixSystem" in
+      aarch64-darwin|x86_64-darwin)
+        echo "  platform: $nixSystem (supported)"
+        ;;
+      *)
+        echo "ERROR: Unsupported platform '$nixSystem'."
+        echo "  Ghostty macOS source build requires aarch64-darwin or x86_64-darwin."
+        exit 1
+        ;;
+    esac
+
+    # 2. Xcode check
+    if ! command -v xcodebuild &>/dev/null; then
+      echo "ERROR: Xcode is not installed (xcodebuild not found in PATH)."
+      echo "  Install Xcode from the App Store or https://developer.apple.com/xcode/"
+      exit 1
+    fi
+
+    xcodeVersion="$(xcodebuild -version 2>/dev/null | head -1 | awk '{print $2}')"
+    echo "  Xcode: $xcodeVersion"
+
+    xcodeMajor="$(echo "$xcodeVersion" | cut -d. -f1)"
+    if [ -z "$xcodeMajor" ] || [ "$xcodeMajor" -lt 16 ]; then
+      echo "ERROR: Xcode $xcodeVersion is too old. Minimum supported version is 16.0."
+      echo "  Update Xcode from the App Store or https://developer.apple.com/xcode/"
+      exit 1
+    fi
+
+    # 3. macOS version
+    if command -v sw_vers &>/dev/null; then
+      macosVersion="$(sw_vers -productVersion)"
+      echo "  macOS: $macosVersion"
+    else
+      echo "  macOS: unknown (sw_vers not found)"
+    fi
+
+    # 4. Swift version
+    if command -v swiftc &>/dev/null; then
+      swiftVersion="$(swiftc --version 2>/dev/null | head -1)"
+      echo "  Swift: $swiftVersion"
+    else
+      echo "  Swift: not found (will rely on SWIFT_EXEC from nix-macos env)"
+    fi
+
+    echo "ghostty-darwin: platform checks passed."
+    # --- End platform detection ---
 
     # Sparkle.xcframework was extracted to macos/Frameworks/ in postPatch.
     # The macOS framework slice is at Sparkle.xcframework/macos-arm64_x86_64/.
