@@ -14,13 +14,13 @@
 const vec3  RING_COLOR    = vec3(0.53, 0.75, 0.98);  // Nord frost8
 
 // ─── Ring geometry ───────────────────────────────────────────────
-const float RING_INTENSITY = 0.08;    // peak additive brightness
-const float RING_WIDTH    = 4.0;     // ring thickness (pixels)
-const float RING_SPEED    = 150.0;   // expansion speed (px/sec)
-const float RING_DURATION = 0.35;    // total animation time (seconds)
+const float RING_INTENSITY = 0.18;    // peak additive brightness
+const float RING_WIDTH    = 6.0;     // ring thickness (pixels)
+const float RING_SPEED    = 180.0;   // expansion speed (px/sec)
+const float RING_DURATION = 0.45;    // total animation time (seconds)
 
 // ─── Timing ──────────────────────────────────────────────────────
-const float MIN_DELAY     = 0.06;    // debounce: ignore first 60ms
+const float MIN_DELAY     = 0.03;    // debounce: ignore first 30ms
 const float FADE_POWER    = 2.0;     // fade-out curve steepness
 
 // ─── Helpers ─────────────────────────────────────────────────────

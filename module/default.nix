@@ -80,8 +80,8 @@ with lib; let
       (builtins.readFile ./shaders/chromatic-aberration.glsl);
 
     "cursor-glow.glsl" = builtins.replaceStrings
-      [ "CORE_INTENSITY  = 0.70" "INNER_INTENSITY = 0.12" "OUTER_RADIUS = 42.0" ]
-      [ "CORE_INTENSITY  = 1.0"  "INNER_INTENSITY = 0.40" "OUTER_RADIUS = 70.0" ]
+      [ "CORE_INTENSITY  = 0.60" "INNER_INTENSITY = 0.14" "OUTER_RADIUS = 55.0" ]
+      [ "CORE_INTENSITY  = 1.0"  "INNER_INTENSITY = 0.45" "OUTER_RADIUS = 90.0" ]
       (builtins.readFile ./shaders/cursor-glow.glsl);
 
     "cursor-trail.glsl" = builtins.replaceStrings
@@ -115,8 +115,8 @@ with lib; let
       (builtins.readFile ./shaders/frost-haze.glsl);
 
     "sonic-boom.glsl" = builtins.replaceStrings
-      [ "RING_INTENSITY = 0.08" "RING_WIDTH    = 4.0" "RING_DURATION = 0.35" ]
-      [ "RING_INTENSITY = 0.40" "RING_WIDTH    = 8.0" "RING_DURATION = 0.8" ]
+      [ "RING_INTENSITY = 0.18" "RING_WIDTH    = 6.0" "RING_DURATION = 0.45" ]
+      [ "RING_INTENSITY = 0.50" "RING_WIDTH    = 12.0" "RING_DURATION = 0.9" ]
       (builtins.readFile ./shaders/sonic-boom.glsl);
   };
 
