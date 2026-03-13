@@ -1,13 +1,13 @@
 // Cursor aura — always-on lightsaber glow with trailing
 //
-// A concentrated light-blue aura that hugs the cursor at all times, pulses
-// with a slow lightsaber hum, and leaves a smooth fading trail when it moves.
+// A concentrated light-blue aura that hugs a line cursor at all times,
+// pulses with a slow lightsaber hum, and leaves a smooth fading trail
+// when it moves. Shaped for a vertical beam cursor, not a dot.
 //
 // Coordinate convention (from Ghostty shadertoy_prefix.glsl):
 //   fragCoord and iCurrentCursor are in the SAME coordinate space.
 //   iCurrentCursor.xy = top-left corner of cursor cell (GL coords: x=left, y=top edge)
 //   iCurrentCursor.zw = width, height of cursor cell
-//   Center = xy + vec2(z*0.5, -w*0.5)
 //   NO Y-flip needed.
 
 // ─── Aura color palette ──────────────────────────────────────────────
@@ -15,10 +15,10 @@ const vec3 CORE_COLOR  = vec3(0.75, 0.92, 1.0);   // near-white cyan
 const vec3 MID_COLOR   = vec3(0.45, 0.72, 1.0);   // light frost blue
 const vec3 OUTER_COLOR = vec3(0.25, 0.50, 0.90);  // deeper blue haze
 
-// ─── Aura geometry (concentrated) ────────────────────────────────────
-const float CORE_RADIUS  = 5.0;    // tight bright core (pixels)
-const float MID_RADIUS   = 14.0;   // close mid glow
-const float OUTER_RADIUS = 32.0;   // compact outer haze
+// ─── Aura geometry (distance from line cursor) ─────────────────────
+const float CORE_WIDTH   = 3.0;    // tight bright core (pixels)
+const float MID_WIDTH    = 10.0;   // close mid glow
+const float OUTER_WIDTH  = 22.0;   // compact outer haze
 
 // ─── Aura intensity ──────────────────────────────────────────────────
 const float CORE_INTENSITY  = 0.95;  // concentrated core brightness
@@ -43,10 +43,26 @@ const float FOLLOW_SPEED = 3.5;    // lower = slower/smoother following
 // ─── Helpers ─────────────────────────────────────────────────────────
 
 // Cursor center from iCurrentCursor/iPreviousCursor vec4.
-// xy = top-left corner (GL coords), zw = cell size.
-// Center: x + w/2 horizontally, y - h/2 vertically (y=top edge, move down).
 vec2 cursorCellCenter(vec4 c) {
     return c.xy + vec2(c.z * 0.5, -c.w * 0.5);
+}
+
+// Cursor as a vertical line segment (for beam cursor shape).
+// Returns (x, y_top, y_bot).
+vec3 cursorLine(vec4 c) {
+    float x = c.x + 1.0;       // 1px in from left edge
+    float y_top = c.y;          // top of cell
+    float y_bot = c.y - c.w;   // bottom of cell
+    return vec3(x, y_top, y_bot);
+}
+
+// Distance from point to a vertical line segment.
+float distToVertLine(vec2 p, vec3 line) {
+    float dx = abs(p.x - line.x);
+    float dy = 0.0;
+    if (p.y > line.y) dy = p.y - line.y;
+    if (p.y < line.z) dy = line.z - p.y;
+    return length(vec2(dx, dy));
 }
 
 // Smooth ease-out for trail animation
@@ -78,8 +94,6 @@ float hash(vec2 p) {
 
 float shimmer(vec2 p, float t) {
     vec2 cell = floor(p * 0.08);
-    // Wrap time to keep hash input small — avoids float precision degradation
-    // after hours of uptime. 256 cycles = ~85s period, invisible repeat.
     float n = hash(cell + floor(mod(t * 3.0, 256.0)));
     return 0.85 + 0.15 * n;
 }
@@ -90,30 +104,29 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec2 uv = fragCoord / iResolution.xy;
     vec4 original = texture(iChannel0, uv);
 
-    // ── Cursor centers (no Y-flip — same coord space as fragCoord) ──
+    // ── Cursor positions ──
     vec2 cursorCenter = cursorCellCenter(iCurrentCursor);
     vec2 prevCenter   = cursorCellCenter(iPreviousCursor);
 
-    // ── Smooth follow: the aura lags behind the actual cursor ──
+    // ── Line cursor geometry (follows smooth position) ──
     float dt = iTime - iTimeCursorChange;
     float followT = 1.0 - exp(-FOLLOW_SPEED * dt);
-    vec2 auraCenter = mix(prevCenter, cursorCenter, easeOutSlow(followT));
 
-    // ── Distance from fragment to aura center ──
-    float dist = length(fragCoord - auraCenter);
+    // Interpolate the cursor cell for smooth line following
+    vec4 smoothCursor = mix(iPreviousCursor, iCurrentCursor, easeOutSlow(followT));
+    vec3 line = cursorLine(smoothCursor);
+    float dist = distToVertLine(fragCoord, line);
 
     // ── Early exit: too far from both aura and any possible trail ──
     float trailProgress = clamp(dt / TRAIL_DURATION, 0.0, 1.0);
     float moveDistance = length(cursorCenter - prevCenter);
-    float maxReach = OUTER_RADIUS + moveDistance + TRAIL_WIDTH;
-    float distToPrev = length(fragCoord - prevCenter);
-    if (dist > maxReach && distToPrev > maxReach) {
+    float maxReach = OUTER_WIDTH + moveDistance + TRAIL_WIDTH;
+    if (dist > maxReach) {
         fragColor = original;
         return;
     }
 
     // ── Pulse modulation (lightsaber hum) ──
-    // Wrap phase to [0, 2pi) to preserve float precision over hours of uptime.
     float pulse = 1.0
         + PULSE_AMOUNT * sin(mod(iTime * PULSE_FREQ, 1.0) * 6.2832)
         + PULSE_AMOUNT * 0.5 * sin(mod(iTime * PULSE_DRIFT, 1.0) * 6.2832 + 1.0);
@@ -121,22 +134,22 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     // ── Shimmer for organic feel ──
     float shim = shimmer(fragCoord, iTime);
 
-    // ── Always-on radial aura (centered on smooth-followed position) ──
+    // ── Always-on line aura (centered on smooth-followed cursor line) ──
     float auraGlow = 0.0;
     vec3 auraColor = vec3(0.0);
 
     // Core layer — bright white-cyan
-    float coreGlow = CORE_INTENSITY * smoothstep(CORE_RADIUS, 0.0, dist);
+    float coreGlow = CORE_INTENSITY * smoothstep(CORE_WIDTH, 0.0, dist);
     auraColor += CORE_COLOR * coreGlow;
     auraGlow += coreGlow;
 
     // Mid layer — frost blue
-    float midGlow = MID_INTENSITY * smoothstep(MID_RADIUS, CORE_RADIUS * 0.5, dist);
+    float midGlow = MID_INTENSITY * smoothstep(MID_WIDTH, CORE_WIDTH * 0.5, dist);
     auraColor += MID_COLOR * midGlow;
     auraGlow += midGlow;
 
     // Outer layer — deep blue haze, gaussian-ish falloff
-    float outerFactor = exp(-2.5 * (dist * dist) / (OUTER_RADIUS * OUTER_RADIUS));
+    float outerFactor = exp(-2.5 * (dist * dist) / (OUTER_WIDTH * OUTER_WIDTH));
     float outerGlow = OUTER_INTENSITY * outerFactor;
     auraColor += OUTER_COLOR * outerGlow;
     auraGlow += outerGlow;

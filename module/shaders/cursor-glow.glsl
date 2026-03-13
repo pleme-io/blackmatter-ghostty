@@ -1,6 +1,7 @@
-// Cursor Glow — soft lightsaber halo around the cursor
+// Cursor Glow — soft lightsaber aura around a line cursor
 //
-// A clean frost-blue aura that sits on the cursor at all times.
+// A clean frost-blue aura that hugs the cursor at all times.
+// Shaped to match a vertical line cursor (beam), not a dot.
 // No prompt detection, no trail math — works identically in every
 // application (shell, vim, htop, TUI).  Bright white-cyan core
 // with a soft gaussian bloom that fades to deep frost blue.
@@ -16,9 +17,9 @@ const vec3 INNER_COLOR = vec3(0.53, 0.75, 0.98);   // Nord frost8
 const vec3 OUTER_COLOR = vec3(0.32, 0.55, 0.88);   // deeper frost blue
 
 // ─── Geometry ──────────────────────────────────────────────────────
-const float CORE_RADIUS  = 6.0;    // bright center (pixels)
-const float INNER_RADIUS = 18.0;   // mid bloom
-const float OUTER_RADIUS = 42.0;   // soft outer reach
+const float CORE_WIDTH   = 3.0;    // bright center (pixels from line)
+const float INNER_WIDTH  = 10.0;   // mid bloom
+const float OUTER_WIDTH  = 28.0;   // soft outer reach
 
 // ─── Intensity ─────────────────────────────────────────────────────
 const float CORE_INTENSITY  = 0.70;  // bright but not blown-out
@@ -31,8 +32,31 @@ const float PULSE_AMOUNT = 0.04;   // very subtle modulation
 
 // ─── Helpers ───────────────────────────────────────────────────────
 
-vec2 cursorCenter(vec4 c) {
-    return c.xy + vec2(c.z * 0.5, -c.w * 0.5);
+// Cursor line: vertical segment from top to bottom of cell.
+// Returns (x of line, y_top, y_bottom) for distance calculation.
+// Uses a thin offset (1px) from the left edge to match beam cursor.
+vec3 cursorLine(vec4 c) {
+    float x = c.x + 1.0;       // 1px in from left edge of cell
+    float y_top = c.y;          // top of cell
+    float y_bot = c.y - c.w;   // bottom of cell (GL: y goes down)
+    return vec3(x, y_top, y_bot);
+}
+
+// Distance from point to a vertical line segment.
+float distToLine(vec2 p, vec3 line) {
+    float x = line.x;
+    float y_top = line.y;
+    float y_bot = line.z;
+
+    // Horizontal distance to the line
+    float dx = abs(p.x - x);
+
+    // Vertical: clamp to segment range, measure overshoot
+    float dy = 0.0;
+    if (p.y > y_top) dy = p.y - y_top;
+    if (p.y < y_bot) dy = y_bot - p.y;
+
+    return length(vec2(dx, dy));
 }
 
 // ─── Main ──────────────────────────────────────────────────────────
@@ -40,11 +64,11 @@ vec2 cursorCenter(vec4 c) {
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec4 original = texture(iChannel0, fragCoord / iResolution.xy);
 
-    vec2 center = cursorCenter(iCurrentCursor);
-    float dist = length(fragCoord - center);
+    vec3 line = cursorLine(iCurrentCursor);
+    float dist = distToLine(fragCoord, line);
 
     // Early exit — vast majority of pixels skip all math
-    if (dist > OUTER_RADIUS) {
+    if (dist > OUTER_WIDTH) {
         fragColor = original;
         return;
     }
@@ -53,10 +77,10 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     float phase = mod(iTime * PULSE_FREQ, 1.0) * 6.2832;
     float pulse = 1.0 + PULSE_AMOUNT * sin(phase);
 
-    // Three-layer radial glow (smoothstep for clean falloff)
-    float core  = CORE_INTENSITY  * smoothstep(CORE_RADIUS,  0.0, dist);
-    float inner = INNER_INTENSITY * smoothstep(INNER_RADIUS, CORE_RADIUS * 0.5, dist);
-    float outer = OUTER_INTENSITY * exp(-3.0 * (dist * dist) / (OUTER_RADIUS * OUTER_RADIUS));
+    // Three-layer glow (smoothstep for clean falloff)
+    float core  = CORE_INTENSITY  * smoothstep(CORE_WIDTH,  0.0, dist);
+    float inner = INNER_INTENSITY * smoothstep(INNER_WIDTH, CORE_WIDTH * 0.5, dist);
+    float outer = OUTER_INTENSITY * exp(-3.0 * (dist * dist) / (OUTER_WIDTH * OUTER_WIDTH));
 
     vec3 glow = CORE_COLOR  * core
               + INNER_COLOR * inner
