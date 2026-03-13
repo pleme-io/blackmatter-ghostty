@@ -46,11 +46,22 @@ mkZigSwiftApp {
   # Patch 5: Xcode 16.x compatibility — macOS 26 APIs (NSGlassEffectView,
   #   ConcentricRectangle) don't exist in Xcode 16.x SDK. Also fixes Swift 6
   #   strict concurrency 'sending' error in DockTilePlugin.
+  #   Uses patched file copies instead of a diff patch for easier maintenance.
   postPatch = ''
     cp ${./patches/GhosttyXCFramework.zig} src/build/GhosttyXCFramework.zig
     cp ${./patches/MetallibStep.zig} src/build/MetallibStep.zig
     cp ${./patches/GhosttyXcodebuild.zig} src/build/GhosttyXcodebuild.zig
-    patch -p1 < ${./patches/xcode16-compat.patch}
+
+    # Xcode 16.x compat: replace files that use macOS 26-only APIs
+    _xcodeMajor="$(xcodebuild -version 2>/dev/null | head -1 | awk '{print $2}' | cut -d. -f1)"
+    if [ -n "$_xcodeMajor" ] && [ "$_xcodeMajor" -lt 26 ]; then
+      echo "ghostty-darwin: Xcode $_xcodeMajor detected (< 26), applying Xcode 16.x compat files"
+      cp ${./patches/xcode16-compat/Features/Custom\ App\ Icon/DockTilePlugin.swift} "macos/Sources/Features/Custom App Icon/DockTilePlugin.swift"
+      cp ${./patches/xcode16-compat/Ghostty/Surface\ View/SurfaceView.swift} "macos/Sources/Ghostty/Surface View/SurfaceView.swift"
+      cp ${./patches/xcode16-compat/Helpers/Backport.swift} "macos/Sources/Helpers/Backport.swift"
+    else
+      echo "ghostty-darwin: Xcode $_xcodeMajor detected (>= 26), skipping Xcode 16.x compat files"
+    fi
 
     nix-macos pbxproj strip-spm macos/Ghostty.xcodeproj/project.pbxproj
 
