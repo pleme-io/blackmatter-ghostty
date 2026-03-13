@@ -3,7 +3,9 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
-    ghostty.url = "github:ghostty-org/ghostty";
+    # Pin to release tag — tracking main pulls in macOS 26 APIs that
+    # require Xcode 26 beta. Release tags are stable with Xcode 16.x.
+    ghostty.url = "github:ghostty-org/ghostty/v1.3.0";
     substrate = {
       url = "github:pleme-io/substrate";
       inputs.nixpkgs.follows = "nixpkgs";
