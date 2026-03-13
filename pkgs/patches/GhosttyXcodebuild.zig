@@ -106,7 +106,10 @@ pub fn init(
         if (deps.i18n) |v| v.addStepDependencies(&step.step);
         deps.docs.installDummy(&step.step);
 
-        step.expectExitCode(0);
+        // Don't use expectExitCode — it switches stdio to .check mode
+        // which captures stderr, hiding Swift/xcodebuild errors.
+        // has_side_effects=true keeps stdio in .inherit mode so errors
+        // are visible in the build log. The build still fails on non-zero exit.
 
         break :build step;
     };
