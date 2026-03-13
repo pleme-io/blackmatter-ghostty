@@ -35,6 +35,7 @@ with lib; let
   # ── Derived shader values ────────────────────────────────────────
   builtinShaders =
     (lib.optional cfg.shaders.bloom ./shaders/bloom.glsl)
+    ++ (lib.optional cfg.shaders.cursorGlow ./shaders/cursor-glow.glsl)
     ++ (lib.optional cfg.shaders.cursorTrail ./shaders/cursor-trail.glsl)
     ++ (lib.optional cfg.shaders.promptSaber ./shaders/prompt-saber.glsl)
     ++ (lib.optional cfg.shaders.filmGrain ./shaders/film-grain.glsl)
@@ -70,6 +71,11 @@ with lib; let
       [ "MAX_OFFSET    = 1.5" "FROST_SHIFT   = 0.12" ]
       [ "MAX_OFFSET    = 10.0" "FROST_SHIFT   = 0.50" ]
       (builtins.readFile ./shaders/chromatic-aberration.glsl);
+
+    "cursor-glow.glsl" = builtins.replaceStrings
+      [ "CORE_INTENSITY  = 0.70" "INNER_INTENSITY = 0.12" "OUTER_RADIUS = 42.0" ]
+      [ "CORE_INTENSITY  = 1.0"  "INNER_INTENSITY = 0.40" "OUTER_RADIUS = 70.0" ]
+      (builtins.readFile ./shaders/cursor-glow.glsl);
 
     "cursor-trail.glsl" = builtins.replaceStrings
       [ "CORE_INTENSITY  = 0.95" "MID_INTENSITY   = 0.18" "OUTER_RADIUS = 32.0" ]
@@ -320,6 +326,12 @@ in {
         type = types.bool;
         default = true;
         description = "Enable subtle bloom glow effect on bright text";
+      };
+
+      cursorGlow = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable soft frost-blue lightsaber halo around the cursor (works in all apps)";
       };
 
       cursorTrail = mkOption {
