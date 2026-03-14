@@ -52,16 +52,15 @@ mkZigSwiftApp {
     cp ${./patches/MetallibStep.zig} src/build/MetallibStep.zig
     cp ${./patches/GhosttyXcodebuild.zig} src/build/GhosttyXcodebuild.zig
 
-    # Xcode 16.x compat: replace files that use macOS 26-only APIs
-    _xcodeMajor="$(xcodebuild -version 2>/dev/null | head -1 | awk '{print $2}' | cut -d. -f1)"
-    if [ -n "$_xcodeMajor" ] && [ "$_xcodeMajor" -lt 26 ]; then
-      echo "ghostty-darwin: Xcode $_xcodeMajor detected (< 26), applying Xcode 16.x compat files"
-      cp ${./patches/xcode16-compat/Features/CustomAppIcon/DockTilePlugin.swift} "macos/Sources/Features/Custom App Icon/DockTilePlugin.swift"
-      cp ${./patches/xcode16-compat/Ghostty/SurfaceView/SurfaceView.swift} "macos/Sources/Ghostty/Surface View/SurfaceView.swift"
-      cp ${./patches/xcode16-compat/Helpers/Backport.swift} "macos/Sources/Helpers/Backport.swift"
-    else
-      echo "ghostty-darwin: Xcode $_xcodeMajor detected (>= 26), skipping Xcode 16.x compat files"
-    fi
+    # Xcode 16.x compat: replace files that use macOS 26-only APIs.
+    # These patched files guard NSGlassEffectView/ConcentricRectangle with
+    # #if compiler(>=6.2), fix Swift 6 'sending' concurrency error, and
+    # extract complex SwiftUI views to avoid type-checker timeout.
+    # Safe to apply unconditionally — the guards are forward-compatible
+    # with Xcode 26+ where the APIs exist.
+    cp ${./patches/xcode16-compat/Features/CustomAppIcon/DockTilePlugin.swift} "macos/Sources/Features/Custom App Icon/DockTilePlugin.swift"
+    cp ${./patches/xcode16-compat/Ghostty/SurfaceView/SurfaceView.swift} "macos/Sources/Ghostty/Surface View/SurfaceView.swift"
+    cp ${./patches/xcode16-compat/Helpers/Backport.swift} "macos/Sources/Helpers/Backport.swift"
 
     nix-macos pbxproj strip-spm macos/Ghostty.xcodeproj/project.pbxproj
 
