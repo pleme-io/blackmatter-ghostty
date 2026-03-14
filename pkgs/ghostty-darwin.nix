@@ -56,8 +56,8 @@ mkZigSwiftApp {
     _xcodeMajor="$(xcodebuild -version 2>/dev/null | head -1 | awk '{print $2}' | cut -d. -f1)"
     if [ -n "$_xcodeMajor" ] && [ "$_xcodeMajor" -lt 26 ]; then
       echo "ghostty-darwin: Xcode $_xcodeMajor detected (< 26), applying Xcode 16.x compat files"
-      cp ${./patches/xcode16-compat/Features/Custom\ App\ Icon/DockTilePlugin.swift} "macos/Sources/Features/Custom App Icon/DockTilePlugin.swift"
-      cp ${./patches/xcode16-compat/Ghostty/Surface\ View/SurfaceView.swift} "macos/Sources/Ghostty/Surface View/SurfaceView.swift"
+      cp ${./patches/xcode16-compat/Features/CustomAppIcon/DockTilePlugin.swift} "macos/Sources/Features/Custom App Icon/DockTilePlugin.swift"
+      cp ${./patches/xcode16-compat/Ghostty/SurfaceView/SurfaceView.swift} "macos/Sources/Ghostty/Surface View/SurfaceView.swift"
       cp ${./patches/xcode16-compat/Helpers/Backport.swift} "macos/Sources/Helpers/Backport.swift"
     else
       echo "ghostty-darwin: Xcode $_xcodeMajor detected (>= 26), skipping Xcode 16.x compat files"
