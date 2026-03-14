@@ -99,10 +99,10 @@ mkZigSwiftApp {
       exit 1
     fi
 
-    xcodeVersion="$(xcodebuild -version 2>/dev/null | head -1 | awk '{print $2}')"
+    xcodeVersion="$(xcodebuild -version 2>/dev/null | head -1 | awk '{print $2}' || true)"
     echo "  Xcode: $xcodeVersion"
 
-    xcodeMajor="$(echo "$xcodeVersion" | cut -d. -f1)"
+    xcodeMajor="$(echo "$xcodeVersion" | cut -d. -f1 || true)"
     if [ -z "$xcodeMajor" ] || [ "$xcodeMajor" -lt 16 ]; then
       echo "ERROR: Xcode $xcodeVersion is too old. Minimum supported version is 16.0."
       echo "  Update Xcode from the App Store or https://developer.apple.com/xcode/"
@@ -119,7 +119,7 @@ mkZigSwiftApp {
 
     # 4. Swift version
     if command -v swiftc &>/dev/null; then
-      swiftVersion="$(swiftc --version 2>/dev/null | head -1)"
+      swiftVersion="$(swiftc --version 2>/dev/null | head -1 || true)"
       echo "  Swift: $swiftVersion"
     else
       echo "  Swift: not found (will rely on SWIFT_EXEC from nix-macos env)"
