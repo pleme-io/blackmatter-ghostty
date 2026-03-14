@@ -30,9 +30,13 @@
       url = "github:cachix/devenv";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    forge = {
+      url = "github:pleme-io/forge";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs, ghostty, substrate, blackmatter-macos, blackmatter-zig, dev-tools, devenv }:
+  outputs = { self, nixpkgs, ghostty, substrate, blackmatter-macos, blackmatter-zig, dev-tools, devenv, forge }:
     let
       lib = nixpkgs.lib;
 
@@ -115,6 +119,20 @@
           ghostty = self.packages.${prev.stdenv.hostPlatform.system}.ghostty;
         } else
           ghostty.overlays.default final prev;
+
+      # ── Apps ─────────────────────────────────────────────────────
+      apps = forAllSystems (system: let
+        pkgs = import nixpkgs { inherit system; };
+        forgeCmd = "${forge.packages.${system}.default}/bin/forge";
+        releaseHelpers = import "${substrate}/lib/release-helpers.nix";
+      in {
+        lock-platform = releaseHelpers.mkLockPlatformApp {
+          hostPkgs = pkgs;
+          toolName = "ghostty";
+          language = "nix";
+          inherit forgeCmd;
+        };
+      });
 
       # ── Home-manager module ──────────────────────────────────────
       homeManagerModules.default = import ./module;
