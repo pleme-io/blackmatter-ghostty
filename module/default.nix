@@ -115,8 +115,8 @@ with lib; let
       (builtins.readFile ./shaders/frost-haze.glsl);
 
     "sonic-boom.glsl" = builtins.replaceStrings
-      [ "R1_INTENSITY  = 0.28" "R1_MAX_RADIUS = 120.0" "IMPLODE_FLASH   = 0.55" ]
-      [ "R1_INTENSITY  = 0.55" "R1_MAX_RADIUS = 200.0" "IMPLODE_FLASH   = 0.85" ]
+      [ "R1_I = 0.28" "R1_MAX    = 120.0" "IMP_I   = 0.55" ]
+      [ "R1_I = 0.55" "R1_MAX    = 200.0" "IMP_I   = 0.85" ]
       (builtins.readFile ./shaders/sonic-boom.glsl);
   };
 
