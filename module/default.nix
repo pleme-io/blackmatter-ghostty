@@ -115,8 +115,8 @@ with lib; let
       (builtins.readFile ./shaders/frost-haze.glsl);
 
     "sonic-boom.glsl" = builtins.replaceStrings
-      [ "RING_INTENSITY = 0.18" "RING_WIDTH    = 6.0" "RING_DURATION = 0.45" ]
-      [ "RING_INTENSITY = 0.50" "RING_WIDTH    = 12.0" "RING_DURATION = 0.9" ]
+      [ "R1_INTENSITY  = 0.28" "R1_MAX_RADIUS = 120.0" "IMPLODE_FLASH   = 0.55" ]
+      [ "R1_INTENSITY  = 0.55" "R1_MAX_RADIUS = 200.0" "IMPLODE_FLASH   = 0.85" ]
       (builtins.readFile ./shaders/sonic-boom.glsl);
   };
 
