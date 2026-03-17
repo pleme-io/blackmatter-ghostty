@@ -342,17 +342,26 @@
             grep -q "title = Code" "${codeFile.source}"
             echo "Config content verified"
 
-            # Derive artifacts base path from config source and verify wrappers + apps
+            # Derive artifacts base path from config source and verify runtime YAML + apps
             artifacts=$(dirname "$(dirname "${infraFile.source}")")
-            test -x "$artifacts/wrappers/ghostty-infra" || (echo "FAIL: ghostty-infra wrapper missing" && exit 1)
-            test -x "$artifacts/wrappers/ghostty-code" || (echo "FAIL: ghostty-code wrapper missing" && exit 1)
-            grep -q 'WORKSPACE="infra"' "$artifacts/wrappers/ghostty-infra"
-            grep -q 'WORKSPACE="code"' "$artifacts/wrappers/ghostty-code"
-            echo "Wrapper scripts verified"
 
-            # Verify macOS .app bundles
-            test -d "$artifacts/Applications/Ghostty Infrastructure.app/Contents/MacOS" || (echo "FAIL: infra .app missing" && exit 1)
-            test -d "$artifacts/Applications/Ghostty Code.app/Contents/MacOS" || (echo "FAIL: code .app missing" && exit 1)
+            # Verify YAML runtime config (shikumi convention, consumed by multicall exec)
+            test -f "$artifacts/wrappers/wrappers.yaml" || (echo "FAIL: wrappers.yaml missing" && exit 1)
+            grep -q 'binaryName.*ghostty-infra' "$artifacts/wrappers/wrappers.yaml"
+            grep -q 'binaryName.*ghostty-code' "$artifacts/wrappers/wrappers.yaml"
+            grep -q 'workspace.*infra' "$artifacts/wrappers/wrappers.yaml"
+            grep -q 'workspace.*code' "$artifacts/wrappers/wrappers.yaml"
+            echo "Runtime YAML config verified"
+
+            # Verify binary-names list (consumed by Nix to create symlinks)
+            test -f "$artifacts/wrappers/binary-names" || (echo "FAIL: binary-names missing" && exit 1)
+            grep -q 'ghostty-infra' "$artifacts/wrappers/binary-names"
+            grep -q 'ghostty-code' "$artifacts/wrappers/binary-names"
+            echo "Binary names list verified"
+
+            # Verify macOS .app bundles (Info.plist only — Nix adds the executable symlink)
+            test -f "$artifacts/Applications/Ghostty Infrastructure.app/Contents/Info.plist" || (echo "FAIL: infra .app missing" && exit 1)
+            test -f "$artifacts/Applications/Ghostty Code.app/Contents/Info.plist" || (echo "FAIL: code .app missing" && exit 1)
             grep -q "CFBundleName" "$artifacts/Applications/Ghostty Infrastructure.app/Contents/Info.plist"
             grep -q "ghostty-infra" "$artifacts/Applications/Ghostty Infrastructure.app/Contents/Info.plist"
             grep -q "ghostty-code" "$artifacts/Applications/Ghostty Code.app/Contents/Info.plist"

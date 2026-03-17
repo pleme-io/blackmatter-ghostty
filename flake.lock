@@ -4708,11 +4708,11 @@
         "substrate": "substrate_3"
       },
       "locked": {
-        "lastModified": 1773772698,
-        "narHash": "sha256-nBKXt9Mle2Oy+xhTFqg0Dd/9qw25GxOIhXh//CTFABw=",
+        "lastModified": 1773778107,
+        "narHash": "sha256-vSlKaDOFhU18Xg/fnBFEadx5R5Yzi5wvFhnAqZgY8Ts=",
         "owner": "pleme-io",
         "repo": "workspace-config",
-        "rev": "5e06d3251bc316e930ad26993bb2d0d21138737d",
+        "rev": "9626177a1a847a16782e68296654489ccc191e2f",
         "type": "github"
       },
       "original": {
