@@ -280,6 +280,41 @@
             touch $out
           '';
 
+          # Verify workspace options evaluate correctly
+          module-workspaces = let
+            wsEval = lib.evalModules {
+              modules = [
+                ./module
+                (mkHmStubs pkgs)
+                ({ ... }: {
+                  config.blackmatter.components.ghostty = {
+                    enable = true;
+                    workspaces = {
+                      infra = {
+                        displayName = "Infrastructure";
+                        theme.cursorColor = "#BF616A";
+                        theme.selectionBackground = "#3B4252";
+                        extraConfig = "background-opacity = 0.9";
+                      };
+                      code = {
+                        displayName = "Code";
+                      };
+                    };
+                  };
+                })
+              ];
+            };
+          in pkgs.runCommand "ghostty-module-workspaces" {} ''
+            echo "Workspaces defined: ${builtins.toJSON (builtins.attrNames wsEval.config.blackmatter.components.ghostty.workspaces)}"
+            echo "Infra display name: ${wsEval.config.blackmatter.components.ghostty.workspaces.infra.displayName}"
+            echo "Infra cursor color: ${builtins.toJSON wsEval.config.blackmatter.components.ghostty.workspaces.infra.theme.cursorColor}"
+            echo "Code display name: ${wsEval.config.blackmatter.components.ghostty.workspaces.code.displayName}"
+            echo "Config file exists for infra: ${builtins.toJSON (builtins.hasAttr ".config/ghostty/config-infra" wsEval.config.home.file)}"
+            echo "Config file exists for code: ${builtins.toJSON (builtins.hasAttr ".config/ghostty/config-code" wsEval.config.home.file)}"
+            echo "Wrapper packages count: ${builtins.toJSON (builtins.length wsEval.config.home.packages)}"
+            touch $out
+          '';
+
           # Verify the useSourceBuild option evaluates on Darwin
         } // lib.optionalAttrs (isDarwin system) {
           module-source-option = let

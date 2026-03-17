@@ -488,6 +488,41 @@ in {
         "macos-option-as-alt" = true;
       };
     };
+
+    workspaces = mkOption {
+      type = types.attrsOf (types.submodule ({ name, ... }: {
+        options = {
+          displayName = mkOption {
+            type = types.str;
+            default = name;
+            description = "Display name shown in title bar.";
+          };
+          theme = {
+            cursorColor = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = "Cursor color override (hex).";
+            };
+            selectionBackground = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = "Selection background color override (hex).";
+            };
+          };
+          extraConfig = mkOption {
+            type = types.lines;
+            default = "";
+            description = "Extra Ghostty config lines for this workspace.";
+          };
+        };
+      }));
+      default = {};
+      description = ''
+        Workspace-specific Ghostty configurations. Each workspace generates
+        a config file and wrapper script (ghostty-{name}) that sets the
+        WORKSPACE env var for downstream tools (shell prompt, Claude statusline).
+      '';
+    };
   };
 
   config = mkIf cfg.enable (mkMerge [
@@ -655,6 +690,56 @@ in {
       ];
     };
     })
+
+    # ── Workspace config files and wrapper scripts ──────────────────
+    (mkIf (cfg.workspaces != {}) (let
+      baseConfigPath = "${config.home.homeDirectory}/.config/ghostty/config";
+
+      # Resolve Ghostty binary path
+      ghosttyPkg =
+        if pkgs.stdenv.isDarwin then
+          (if cfg.darwin.useSourceBuild then pkgs.ghostty else pkgs.ghostty-bin)
+        else
+          pkgs.ghostty;
+      ghosttyBin = "${ghosttyPkg}/bin/ghostty";
+
+      # Generate a workspace config file content
+      mkWorkspaceConfig = name: ws: let
+        titleLine = "title = ${ws.displayName}";
+        cursorLine = optionalString (ws.theme.cursorColor != null)
+          "cursor-color = ${ws.theme.cursorColor}";
+        selectionLine = optionalString (ws.theme.selectionBackground != null)
+          "selection-background = ${ws.theme.selectionBackground}";
+        extra = ws.extraConfig;
+      in ''
+        # Ghostty Workspace: ${name}
+        # Managed by Nix (blackmatter.components.ghostty.workspaces)
+        config-file = ${baseConfigPath}
+        ${titleLine}
+        ${cursorLine}
+        ${selectionLine}
+        ${extra}
+      '';
+
+      # Generate a wrapper script for a workspace
+      mkWorkspaceWrapper = name: ws: pkgs.writeShellScriptBin "ghostty-${name}" ''
+        export WORKSPACE="${name}"
+        exec ${ghosttyBin} --config-file="$HOME/.config/ghostty/config-${name}" "$@"
+      '';
+
+      workspaceConfigs = mapAttrs' (name: ws:
+        nameValuePair ".config/ghostty/config-${name}" {
+          text = mkWorkspaceConfig name ws;
+        }
+      ) cfg.workspaces;
+
+      workspaceWrappers = mapAttrsToList (name: ws:
+        mkWorkspaceWrapper name ws
+      ) cfg.workspaces;
+    in {
+      home.file = workspaceConfigs;
+      home.packages = workspaceWrappers;
+    }))
 
     # On macOS, write config file directly (user installs ghostty manually)
     (mkIf pkgs.stdenv.isDarwin {
