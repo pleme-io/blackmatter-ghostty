@@ -703,12 +703,17 @@ in {
       baseConfigPath = "${config.home.homeDirectory}/.config/ghostty/config";
 
       # Resolve Ghostty binary path
+      # Darwin source builds put the binary inside the .app bundle, not bin/
       ghosttyPkg =
         if pkgs.stdenv.isDarwin then
           (if cfg.darwin.useSourceBuild then pkgs.ghostty else pkgs.ghostty-bin)
         else
           pkgs.ghostty;
-      ghosttyBin = "${ghosttyPkg}/bin/ghostty";
+      ghosttyBin =
+        if pkgs.stdenv.isDarwin && cfg.darwin.useSourceBuild then
+          "${ghosttyPkg}/Applications/Ghostty.app/Contents/MacOS/ghostty"
+        else
+          "${ghosttyPkg}/bin/ghostty";
 
       # Serialize workspace definitions to JSON for the Rust generator
       wsJson = builtins.toJSON {
