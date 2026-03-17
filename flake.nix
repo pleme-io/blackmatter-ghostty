@@ -21,6 +21,10 @@
       inputs.nixpkgs.follows = "nixpkgs";
       inputs.substrate.follows = "substrate";
     };
+    workspace-config = {
+      url = "github:pleme-io/workspace-config";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     dev-tools = {
       url = "github:pleme-io/dev-tools";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -36,7 +40,7 @@
     };
   };
 
-  outputs = { self, nixpkgs, ghostty, substrate, blackmatter-macos, blackmatter-zig, dev-tools, devenv, forge }:
+  outputs = { self, nixpkgs, ghostty, substrate, blackmatter-macos, blackmatter-zig, workspace-config, dev-tools, devenv, forge }:
     let
       lib = nixpkgs.lib;
 
@@ -115,10 +119,13 @@
 
       # ── Overlay ──────────────────────────────────────────────────
       overlays.default = final: prev:
-        if prev.stdenv.isDarwin then {
+        (if prev.stdenv.isDarwin then {
           ghostty = self.packages.${prev.stdenv.hostPlatform.system}.ghostty;
         } else
-          ghostty.overlays.default final prev;
+          ghostty.overlays.default final prev)
+        // {
+          workspace-config = workspace-config.packages.${prev.stdenv.hostPlatform.system}.default;
+        };
 
       # ── Apps ─────────────────────────────────────────────────────
       apps = forAllSystems (system: let

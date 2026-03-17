@@ -697,6 +697,8 @@ in {
     })
 
     # ── Workspace config files and wrapper scripts ──────────────────
+    # Uses workspace-config CLI for typed, validated generation instead
+    # of raw string concatenation.
     (mkIf (cfg.workspaces != {}) (let
       baseConfigPath = "${config.home.homeDirectory}/.config/ghostty/config";
 
@@ -708,63 +710,53 @@ in {
           pkgs.ghostty;
       ghosttyBin = "${ghosttyPkg}/bin/ghostty";
 
-      # Generate a workspace config file content (no leading whitespace)
-      mkWorkspaceConfig = name: ws:
-        "# Ghostty Workspace: ${name}\n"
-        + "# Managed by Nix (blackmatter.components.ghostty.workspaces)\n"
-        + "config-file = ${baseConfigPath}\n"
-        + "title = ${ws.displayName}\n"
-        + optionalString (ws.theme.cursorColor != null)
-          "cursor-color = ${ws.theme.cursorColor}\n"
-        + optionalString (ws.theme.selectionBackground != null)
-          "selection-background = ${ws.theme.selectionBackground}\n"
-        + optionalString (ws.theme.background != null)
-          "background = ${ws.theme.background}\n"
-        + optionalString (ws.extraConfig != "")
-          "${ws.extraConfig}\n";
+      # Serialize workspace definitions to JSON for the Rust generator
+      wsJson = builtins.toJSON {
+        baseConfigPath = baseConfigPath;
+        ghosttyBin = ghosttyBin;
+        bundleIdPrefix = "io.pleme";
+        workspaces = mapAttrsToList (name: ws: {
+          inherit name;
+          displayName = ws.displayName;
+          theme = {
+            cursorColor = ws.theme.cursorColor;
+            selectionBackground = ws.theme.selectionBackground;
+            background = ws.theme.background;
+          };
+          extraConfig = ws.extraConfig;
+        }) cfg.workspaces;
+      };
 
-      # Generate a wrapper script for a workspace
-      mkWorkspaceWrapper = name: ws: pkgs.writeShellScriptBin "ghostty-${name}" ''
-        export WORKSPACE="${name}"
-        exec ${ghosttyBin} --config-file="$HOME/.config/ghostty/config-${name}" "$@"
+      # Generate all workspace artifacts via workspace-config CLI
+      workspaceArtifacts = pkgs.runCommand "ghostty-workspaces" {
+        nativeBuildInputs = [ pkgs.workspace-config ];
+        passAsFile = [ "wsJson" ];
+        inherit wsJson;
+      } ''
+        mkdir -p $out/{configs,wrappers,Applications}
+        workspace-config generate-all \
+          --input "$wsJsonPath" \
+          --config-dir $out/configs \
+          --wrapper-dir $out/wrappers \
+          --app-dir $out/Applications
+        chmod +x $out/wrappers/*
       '';
 
-      # Generate a macOS .app bundle for Spotlight discoverability
-      mkWorkspaceApp = name: ws: pkgs.runCommand "Ghostty-${ws.displayName}.app" {} ''
-        mkdir -p "$out/Applications/Ghostty ${ws.displayName}.app/Contents/MacOS"
-        cat > "$out/Applications/Ghostty ${ws.displayName}.app/Contents/MacOS/ghostty-${name}" <<'WRAPPER'
-        #!/bin/bash
-        export WORKSPACE="${name}"
-        exec ${ghosttyBin} --config-file="$HOME/.config/ghostty/config-${name}" "$@"
-        WRAPPER
-        chmod +x "$out/Applications/Ghostty ${ws.displayName}.app/Contents/MacOS/ghostty-${name}"
-
-        cat > "$out/Applications/Ghostty ${ws.displayName}.app/Contents/Info.plist" <<PLIST
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0"><dict>
-          <key>CFBundleName</key><string>Ghostty ${ws.displayName}</string>
-          <key>CFBundleExecutable</key><string>ghostty-${name}</string>
-          <key>CFBundleIdentifier</key><string>io.pleme.ghostty-${name}</string>
-          <key>CFBundleVersion</key><string>1.0</string>
-          <key>CFBundlePackageType</key><string>APPL</string>
-        </dict></plist>
-        PLIST
-      '';
-
-      workspaceConfigs = mapAttrs' (name: ws:
+      # Map generated config files to home.file entries
+      workspaceConfigs = mapAttrs' (name: _ws:
         nameValuePair ".config/ghostty/config-${name}" {
-          text = mkWorkspaceConfig name ws;
+          text = builtins.readFile "${workspaceArtifacts}/configs/config-${name}";
         }
       ) cfg.workspaces;
 
-      workspaceWrappers = mapAttrsToList (name: ws:
-        mkWorkspaceWrapper name ws
+      # Create PATH-visible wrapper scripts from generated output
+      workspaceWrappers = mapAttrsToList (name: _ws:
+        pkgs.writeShellScriptBin "ghostty-${name}"
+          (builtins.readFile "${workspaceArtifacts}/wrappers/ghostty-${name}")
       ) cfg.workspaces;
 
-      workspaceApps = optionals pkgs.stdenv.isDarwin (mapAttrsToList (name: ws:
-        mkWorkspaceApp name ws
-      ) cfg.workspaces);
+      # macOS .app bundles from generated output (Darwin only)
+      workspaceApps = optionals pkgs.stdenv.isDarwin [workspaceArtifacts];
     in {
       home.file = workspaceConfigs;
       home.packages = workspaceWrappers ++ workspaceApps;
