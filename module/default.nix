@@ -509,6 +509,11 @@ in {
               description = "Selection background color override (hex).";
             };
           };
+          background = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = "Background color override for subtle ambient tint (hex).";
+          };
           extraConfig = mkOption {
             type = types.lines;
             default = "";
@@ -703,28 +708,48 @@ in {
           pkgs.ghostty;
       ghosttyBin = "${ghosttyPkg}/bin/ghostty";
 
-      # Generate a workspace config file content
-      mkWorkspaceConfig = name: ws: let
-        titleLine = "title = ${ws.displayName}";
-        cursorLine = optionalString (ws.theme.cursorColor != null)
-          "cursor-color = ${ws.theme.cursorColor}";
-        selectionLine = optionalString (ws.theme.selectionBackground != null)
-          "selection-background = ${ws.theme.selectionBackground}";
-        extra = ws.extraConfig;
-      in ''
-        # Ghostty Workspace: ${name}
-        # Managed by Nix (blackmatter.components.ghostty.workspaces)
-        config-file = ${baseConfigPath}
-        ${titleLine}
-        ${cursorLine}
-        ${selectionLine}
-        ${extra}
-      '';
+      # Generate a workspace config file content (no leading whitespace)
+      mkWorkspaceConfig = name: ws:
+        "# Ghostty Workspace: ${name}\n"
+        + "# Managed by Nix (blackmatter.components.ghostty.workspaces)\n"
+        + "config-file = ${baseConfigPath}\n"
+        + "title = ${ws.displayName}\n"
+        + optionalString (ws.theme.cursorColor != null)
+          "cursor-color = ${ws.theme.cursorColor}\n"
+        + optionalString (ws.theme.selectionBackground != null)
+          "selection-background = ${ws.theme.selectionBackground}\n"
+        + optionalString (ws.theme.background != null)
+          "background = ${ws.theme.background}\n"
+        + optionalString (ws.extraConfig != "")
+          "${ws.extraConfig}\n";
 
       # Generate a wrapper script for a workspace
       mkWorkspaceWrapper = name: ws: pkgs.writeShellScriptBin "ghostty-${name}" ''
         export WORKSPACE="${name}"
         exec ${ghosttyBin} --config-file="$HOME/.config/ghostty/config-${name}" "$@"
+      '';
+
+      # Generate a macOS .app bundle for Spotlight discoverability
+      mkWorkspaceApp = name: ws: pkgs.runCommand "Ghostty-${ws.displayName}.app" {} ''
+        mkdir -p "$out/Applications/Ghostty ${ws.displayName}.app/Contents/MacOS"
+        cat > "$out/Applications/Ghostty ${ws.displayName}.app/Contents/MacOS/ghostty-${name}" <<'WRAPPER'
+        #!/bin/bash
+        export WORKSPACE="${name}"
+        exec ${ghosttyBin} --config-file="$HOME/.config/ghostty/config-${name}" "$@"
+        WRAPPER
+        chmod +x "$out/Applications/Ghostty ${ws.displayName}.app/Contents/MacOS/ghostty-${name}"
+
+        cat > "$out/Applications/Ghostty ${ws.displayName}.app/Contents/Info.plist" <<PLIST
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0"><dict>
+          <key>CFBundleName</key><string>Ghostty ${ws.displayName}</string>
+          <key>CFBundleExecutable</key><string>ghostty-${name}</string>
+          <key>CFBundleIdentifier</key><string>io.pleme.ghostty-${name}</string>
+          <key>CFBundleVersion</key><string>1.0</string>
+          <key>CFBundlePackageType</key><string>APPL</string>
+        </dict></plist>
+        PLIST
       '';
 
       workspaceConfigs = mapAttrs' (name: ws:
@@ -736,9 +761,13 @@ in {
       workspaceWrappers = mapAttrsToList (name: ws:
         mkWorkspaceWrapper name ws
       ) cfg.workspaces;
+
+      workspaceApps = optionals pkgs.stdenv.isDarwin (mapAttrsToList (name: ws:
+        mkWorkspaceApp name ws
+      ) cfg.workspaces);
     in {
       home.file = workspaceConfigs;
-      home.packages = workspaceWrappers;
+      home.packages = workspaceWrappers ++ workspaceApps;
     }))
 
     # On macOS, write config file directly (user installs ghostty manually)
