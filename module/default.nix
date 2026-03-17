@@ -742,24 +742,26 @@ in {
         chmod +x $out/wrappers/*
       '';
 
-      # Map generated config files to home.file entries
+      # Symlink generated config files (no IFD — uses source, not readFile)
       workspaceConfigs = mapAttrs' (name: _ws:
         nameValuePair ".config/ghostty/config-${name}" {
-          text = builtins.readFile "${workspaceArtifacts}/configs/config-${name}";
+          source = "${workspaceArtifacts}/configs/config-${name}";
         }
       ) cfg.workspaces;
 
-      # Create PATH-visible wrapper scripts from generated output
-      workspaceWrappers = mapAttrsToList (name: _ws:
-        pkgs.writeShellScriptBin "ghostty-${name}"
-          (builtins.readFile "${workspaceArtifacts}/wrappers/ghostty-${name}")
-      ) cfg.workspaces;
+      # Single package with bin/ symlinks to generated wrappers (no IFD)
+      workspaceWrapperPkg = pkgs.runCommand "ghostty-workspace-wrappers" {} ''
+        mkdir -p $out/bin
+        for f in ${workspaceArtifacts}/wrappers/*; do
+          ln -s "$f" "$out/bin/$(basename "$f")"
+        done
+      '';
 
       # macOS .app bundles from generated output (Darwin only)
       workspaceApps = optionals pkgs.stdenv.isDarwin [workspaceArtifacts];
     in {
       home.file = workspaceConfigs;
-      home.packages = workspaceWrappers ++ workspaceApps;
+      home.packages = [workspaceWrapperPkg] ++ workspaceApps;
     }))
 
     # On macOS, write config file directly (user installs ghostty manually)
