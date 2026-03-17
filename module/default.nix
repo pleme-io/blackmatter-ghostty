@@ -508,11 +508,11 @@ in {
               default = null;
               description = "Selection background color override (hex).";
             };
-          };
-          background = mkOption {
-            type = types.nullOr types.str;
-            default = null;
-            description = "Background color override for subtle ambient tint (hex).";
+            background = mkOption {
+              type = types.nullOr types.str;
+              default = null;
+              description = "Background color override for subtle ambient tint (hex).";
+            };
           };
           extraConfig = mkOption {
             type = types.lines;
