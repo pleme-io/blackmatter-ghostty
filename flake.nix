@@ -118,14 +118,17 @@
         }));
 
       # ── Overlay ──────────────────────────────────────────────────
+      # Guard against empty attrset probe from nix flake check schema validation
       overlays.default = final: prev:
-        (if prev.stdenv.isDarwin then {
-          ghostty = self.packages.${prev.stdenv.hostPlatform.system}.ghostty;
-        } else
-          ghostty.overlays.default final prev)
-        // {
-          workspace-config = workspace-config.packages.${prev.stdenv.hostPlatform.system}.default;
-        };
+        lib.optionalAttrs (prev ? stdenv) (
+          (if prev.stdenv.isDarwin then {
+            ghostty = self.packages.${prev.stdenv.hostPlatform.system}.ghostty;
+          } else
+            ghostty.overlays.default final prev)
+          // {
+            workspace-config = workspace-config.packages.${prev.stdenv.hostPlatform.system}.default;
+          }
+        );
 
       # ── Apps ─────────────────────────────────────────────────────
       apps = forAllSystems (system: let
@@ -179,7 +182,10 @@
       # ── Checks ──────────────────────────────────────────────────
       checks = forAllSystems (system:
         let
-          pkgs = import nixpkgs { inherit system; };
+          pkgs = import nixpkgs {
+            inherit system;
+            overlays = [ self.overlays.default ];
+          };
 
           moduleEval = lib.evalModules {
             modules = [
@@ -311,6 +317,8 @@
                 })
               ];
             };
+            infraFile = wsEval.config.home.file.".config/ghostty/config-infra";
+            codeFile = wsEval.config.home.file.".config/ghostty/config-code";
           in pkgs.runCommand "ghostty-module-workspaces" {} ''
             echo "Workspaces defined: ${builtins.toJSON (builtins.attrNames wsEval.config.blackmatter.components.ghostty.workspaces)}"
             echo "Infra display name: ${wsEval.config.blackmatter.components.ghostty.workspaces.infra.displayName}"
@@ -319,6 +327,55 @@
             echo "Config file exists for infra: ${builtins.toJSON (builtins.hasAttr ".config/ghostty/config-infra" wsEval.config.home.file)}"
             echo "Config file exists for code: ${builtins.toJSON (builtins.hasAttr ".config/ghostty/config-code" wsEval.config.home.file)}"
             echo "Wrapper packages count: ${builtins.toJSON (builtins.length wsEval.config.home.packages)}"
+
+            # Verify config files use source (symlink to store path, no IFD)
+            echo "Infra config source: ${infraFile.source}"
+            echo "Code config source: ${codeFile.source}"
+
+            # Verify generated config content is correct
+            grep -q "# Ghostty Workspace: infra" "${infraFile.source}"
+            grep -q "cursor-color = #BF616A" "${infraFile.source}"
+            grep -q "selection-background = #3B4252" "${infraFile.source}"
+            grep -q "title = Infrastructure" "${infraFile.source}"
+            grep -q "background-opacity = 0.9" "${infraFile.source}"
+            grep -q "# Ghostty Workspace: code" "${codeFile.source}"
+            grep -q "title = Code" "${codeFile.source}"
+            echo "Config content verified"
+
+            # Derive artifacts base path from config source and verify wrappers + apps
+            artifacts=$(dirname "$(dirname "${infraFile.source}")")
+            test -x "$artifacts/wrappers/ghostty-infra" || (echo "FAIL: ghostty-infra wrapper missing" && exit 1)
+            test -x "$artifacts/wrappers/ghostty-code" || (echo "FAIL: ghostty-code wrapper missing" && exit 1)
+            grep -q 'WORKSPACE="infra"' "$artifacts/wrappers/ghostty-infra"
+            grep -q 'WORKSPACE="code"' "$artifacts/wrappers/ghostty-code"
+            echo "Wrapper scripts verified"
+
+            # Verify macOS .app bundles
+            test -d "$artifacts/Applications/Ghostty Infrastructure.app/Contents/MacOS" || (echo "FAIL: infra .app missing" && exit 1)
+            test -d "$artifacts/Applications/Ghostty Code.app/Contents/MacOS" || (echo "FAIL: code .app missing" && exit 1)
+            grep -q "CFBundleName" "$artifacts/Applications/Ghostty Infrastructure.app/Contents/Info.plist"
+            grep -q "ghostty-infra" "$artifacts/Applications/Ghostty Infrastructure.app/Contents/Info.plist"
+            grep -q "ghostty-code" "$artifacts/Applications/Ghostty Code.app/Contents/Info.plist"
+            echo "App bundles verified"
+
+            touch $out
+          '';
+
+          # Verify workspace-config CLI works (validate subcommand)
+          workspace-config-validate = pkgs.runCommand "workspace-config-validate" {
+            nativeBuildInputs = [ pkgs.workspace-config ];
+          } ''
+            echo '${builtins.toJSON {
+              baseConfigPath = "/test/config";
+              ghosttyBin = "/test/ghostty";
+              bundleIdPrefix = "io.test";
+              workspaces = [
+                { name = "alpha"; displayName = "Alpha"; theme = { cursorColor = "#A3BE8C"; selectionBackground = null; background = null; }; extraConfig = ""; }
+                { name = "beta"; displayName = "Beta"; theme = { cursorColor = null; selectionBackground = null; background = null; }; extraConfig = ""; }
+              ];
+            }}' > input.json
+            workspace-config validate --input input.json 2>&1 | grep -q "valid: 2"
+            echo "workspace-config validate passed"
             touch $out
           '';
 
