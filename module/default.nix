@@ -749,18 +749,35 @@ in {
         }
       ) cfg.workspaces;
 
-      # Single package with bin/ symlinks to generated wrappers (no IFD)
+      # Runtime YAML config for multicall exec (shikumi convention)
+      workspaceRuntimeConfig = {
+        ".config/workspace-config/wrappers.d/ghostty.yaml" = {
+          source = "${workspaceArtifacts}/wrappers/wrappers.yaml";
+        };
+      };
+
+      # Multicall symlinks: ghostty-{name} → workspace-config binary
       workspaceWrapperPkg = pkgs.runCommand "ghostty-workspace-wrappers" {} ''
         mkdir -p $out/bin
-        for f in ${workspaceArtifacts}/wrappers/*; do
-          ln -s "$f" "$out/bin/$(basename "$f")"
-        done
+        ${concatStringsSep "\n" (mapAttrsToList (name: _ws:
+          "ln -s ${pkgs.workspace-config}/bin/workspace-config $out/bin/ghostty-${name}"
+        ) cfg.workspaces)}
       '';
 
-      # macOS .app bundles from generated output (Darwin only)
-      workspaceApps = optionals pkgs.stdenv.isDarwin [workspaceArtifacts];
+      # macOS .app bundles — symlink workspace-config as the executable
+      workspaceAppPkg = pkgs.runCommand "ghostty-workspace-apps" {} ''
+        ${concatStringsSep "\n" (mapAttrsToList (name: ws: ''
+          mkdir -p "$out/Applications/Ghostty ${ws.displayName}.app/Contents/MacOS"
+          ln -s ${pkgs.workspace-config}/bin/workspace-config \
+            "$out/Applications/Ghostty ${ws.displayName}.app/Contents/MacOS/ghostty-${name}"
+          cp "${workspaceArtifacts}/Applications/Ghostty ${ws.displayName}.app/Contents/Info.plist" \
+            "$out/Applications/Ghostty ${ws.displayName}.app/Contents/Info.plist"
+        '') cfg.workspaces)}
+      '';
+
+      workspaceApps = optionals pkgs.stdenv.isDarwin [workspaceAppPkg];
     in {
-      home.file = workspaceConfigs;
+      home.file = workspaceConfigs // workspaceRuntimeConfig;
       home.packages = [workspaceWrapperPkg] ++ workspaceApps;
     }))
 
