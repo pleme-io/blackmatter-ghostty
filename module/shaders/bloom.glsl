@@ -1,41 +1,46 @@
-// Nord Frost — subtle text bloom + scan lines + vignette
+// Bloom — subtle text bloom + scan lines + vignette
 //
 // Content-reactive shader that works in every context (shell, TUI, Claude Code).
 // Uses only iChannel0 (screen texture), iTime, and iResolution — no cursor
 // uniforms. Bright text gets a soft Nord frost-blue bloom halo; faint scan
 // lines and edge vignette add depth without interfering with readability.
+//
+// Shared functions: luminance (see nord-common.glsl)
 
-// ─── Nord frost palette ──────────────────────────────────────────────
-const vec3 FROST_CYAN  = vec3(0.55, 0.83, 0.93);  // nord8 — primary accent
-const vec3 FROST_ICE   = vec3(0.70, 0.88, 1.00);  // bright ice highlight
+// ─── Constants ─────────────────────────────────────────────────────────
+const float TAU = 6.2832;
 
-// ─── Bloom parameters ────────────────────────────────────────────────
-const float BLOOM_THRESHOLD  = 0.55;   // luminance threshold for source pixels
-const float BLOOM_INTENSITY  = 0.20;   // overall bloom brightness
-const float BLOOM_RADIUS     = 5.0;    // sample spread (pixels)
-const float BLOOM_TINT       = 0.35;   // Nord frost tint strength (0=none, 1=full)
-const int   BLOOM_SAMPLES    = 14;     // golden-spiral sample count
+// ─── Color Palette (Nord Frost) ────────────────────────────────────────
+const vec3 FROST_CYAN = vec3(0.55, 0.83, 0.93);  // Nord8 — primary accent
+const vec3 FROST_ICE  = vec3(0.70, 0.88, 1.00);  // bright ice highlight
 
-// ─── Scan lines ──────────────────────────────────────────────────────
-const float SCAN_INTENSITY   = 0.025;  // barely visible
-const float SCAN_SPEED       = 0.08;   // drift rate (fraction of screen/sec)
-const float SCAN_PERIOD      = 4.0;    // pixels between lines
+// ─── Bloom Parameters ──────────────────────────────────────────────────
+const float BLOOM_THRESHOLD = 0.55;  // luminance threshold for source pixels
+const float BLOOM_INTENSITY = 0.20;  // overall bloom brightness
+const float BLOOM_RADIUS    = 5.0;   // sample spread (pixels)
+const float BLOOM_TINT      = 0.35;  // Nord frost tint strength (0=none, 1=full)
+const int   BLOOM_SAMPLES   = 14;    // golden-spiral sample count
 
-// ─── Vignette ────────────────────────────────────────────────────────
+// ─── Scan Lines ────────────────────────────────────────────────────────
+const float SCAN_INTENSITY = 0.025;  // barely visible
+const float SCAN_SPEED     = 0.08;   // drift rate (fraction of screen/sec)
+const float SCAN_PERIOD    = 4.0;    // pixels between lines
+
+// ─── Vignette ──────────────────────────────────────────────────────────
 const float VIGNETTE_STRENGTH = 0.18;  // max darkening at corners
 const float VIGNETTE_SOFTNESS = 0.45;  // how far in the effect reaches
 
-// ─── Pulse ───────────────────────────────────────────────────────────
-const float PULSE_FREQ   = 0.3;   // very slow breathing
-const float PULSE_AMOUNT = 0.015; // barely perceptible intensity shift
+// ─── Pulse ─────────────────────────────────────────────────────────────
+const float PULSE_FREQ   = 0.3;    // very slow breathing
+const float PULSE_AMOUNT = 0.015;  // barely perceptible intensity shift
 
-// ─── Helpers ─────────────────────────────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────────────────────
 
 float luminance(vec3 c) {
     return dot(c, vec3(0.2126, 0.7152, 0.0722));
 }
 
-// ─── Main ────────────────────────────────────────────────────────────
+// ─── Main ──────────────────────────────────────────────────────────────
 
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec2 uv = fragCoord / iResolution.xy;
@@ -48,11 +53,11 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec3 bloom = vec3(0.0);
     float totalWeight = 0.0;
     vec2 texelSize = 1.0 / iResolution.xy;
-    const float goldenAngle = 2.39996323;
+    const float GOLDEN_ANGLE = 2.39996323;
 
     for (int i = 0; i < BLOOM_SAMPLES; i++) {
         float fi = float(i);
-        float angle = fi * goldenAngle;
+        float angle = fi * GOLDEN_ANGLE;
         float dist = sqrt(fi + 0.5) * BLOOM_RADIUS;
         vec2 offset = vec2(cos(angle), sin(angle)) * dist * texelSize;
 
@@ -76,7 +81,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     // Wrap time offset to SCAN_PERIOD to avoid float precision loss at large iTime.
     float scanOffset = mod(iTime * SCAN_SPEED * iResolution.y, SCAN_PERIOD);
     float scanY = fragCoord.y + scanOffset;
-    float scan = 1.0 - SCAN_INTENSITY * (0.5 + 0.5 * sin(scanY * 6.2832 / SCAN_PERIOD));
+    float scan = 1.0 - SCAN_INTENSITY * (0.5 + 0.5 * sin(scanY * TAU / SCAN_PERIOD));
 
     // ── Vignette: soft edge darkening ──
     vec2 centered = uv - 0.5;
@@ -85,8 +90,8 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     );
 
     // ── Pulse: barely-there breathing ──
-    // Wrap phase to [0, 2pi) to preserve float precision over hours of uptime.
-    float pulse = 1.0 + PULSE_AMOUNT * sin(mod(iTime * PULSE_FREQ, 1.0) * 6.2832);
+    // Wrap phase to [0, TAU) to preserve float precision over hours of uptime.
+    float pulse = 1.0 + PULSE_AMOUNT * sin(mod(iTime * PULSE_FREQ, 1.0) * TAU);
 
     // ── Composite ──
     vec3 color = original.rgb + bloom * BLOOM_INTENSITY * pulse;

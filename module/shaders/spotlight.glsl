@@ -1,30 +1,35 @@
 // Spotlight — soft cursor-centered reading lamp
 //
 // Gently dims areas far from the cursor, creating a subtle focus
-// gradient that draws the eye to where you're working.  Works in
+// gradient that draws the eye to where you are working. Works in
 // all applications — shell, editors, TUIs.
 //
 // Coordinate convention (Ghostty shadertoy_prefix.glsl):
 //   iCurrentCursor.xy  = top-left of cursor cell (GL coords)
 //   iCurrentCursor.zw  = cell width, height
 //   Center = xy + vec2(z*0.5, -w*0.5)
+//
+// Shared functions: cursorCenter (see nord-common.glsl)
 
-// ─── Geometry ────────────────────────────────────────────────────
-const float INNER_RADIUS  = 250.0;   // full brightness zone (pixels)
-const float OUTER_RADIUS  = 900.0;   // outer edge of dimming
-const float DIM_AMOUNT    = 0.10;    // max dimming at screen edges (0-1)
+// ─── Constants ─────────────────────────────────────────────────────────
+const float TAU = 6.2832;
 
-// ─── Breathing ───────────────────────────────────────────────────
-const float PULSE_FREQ    = 0.4;     // Hz (very slow)
-const float PULSE_AMOUNT  = 0.02;    // subtle radius modulation
+// ─── Geometry ──────────────────────────────────────────────────────────
+const float INNER_RADIUS = 250.0;  // full brightness zone (pixels)
+const float OUTER_RADIUS = 900.0;  // outer edge of dimming
+const float DIM_AMOUNT   = 0.10;   // max dimming at screen edges (0-1)
 
-// ─── Helpers ─────────────────────────────────────────────────────
+// ─── Breathing ─────────────────────────────────────────────────────────
+const float PULSE_FREQ   = 0.4;    // Hz (very slow)
+const float PULSE_AMOUNT = 0.02;   // subtle radius modulation
+
+// ─── Helpers ───────────────────────────────────────────────────────────
 
 vec2 cursorCenter(vec4 c) {
     return c.xy + vec2(c.z * 0.5, -c.w * 0.5);
 }
 
-// ─── Main ────────────────────────────────────────────────────────
+// ─── Main ──────────────────────────────────────────────────────────────
 
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec4 original = texture(iChannel0, fragCoord / iResolution.xy);
@@ -39,7 +44,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     }
 
     // Breathing modulation on inner radius
-    float phase = mod(iTime * PULSE_FREQ, 1.0) * 6.2832;
+    float phase = mod(iTime * PULSE_FREQ, 1.0) * TAU;
     float inner = INNER_RADIUS * (1.0 + PULSE_AMOUNT * sin(phase));
 
     // Smooth dimming gradient

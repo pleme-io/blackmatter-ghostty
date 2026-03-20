@@ -1,4 +1,4 @@
-// Cursor aura — always-on lightsaber glow with trailing
+// Cursor Trail — always-on lightsaber glow with trailing
 //
 // A concentrated light-blue aura that hugs a line cursor at all times,
 // pulses with a slow lightsaber hum, and leaves a smooth fading trail
@@ -9,50 +9,55 @@
 //   iCurrentCursor.xy = top-left corner of cursor cell (GL coords: x=left, y=top edge)
 //   iCurrentCursor.zw = width, height of cursor cell
 //   NO Y-flip needed.
+//
+// Shared functions: cursorCenter, hash21, shimmer, gaussian (see nord-common.glsl)
 
-// ─── Aura color palette ──────────────────────────────────────────────
+// ─── Constants ─────────────────────────────────────────────────────────
+const float TAU = 6.2832;
+
+// ─── Color Palette (Aura) ──────────────────────────────────────────────
 const vec3 CORE_COLOR  = vec3(0.75, 0.92, 1.0);   // near-white cyan
 const vec3 MID_COLOR   = vec3(0.45, 0.72, 1.0);   // light frost blue
-const vec3 OUTER_COLOR = vec3(0.25, 0.50, 0.90);  // deeper blue haze
+const vec3 OUTER_COLOR = vec3(0.25, 0.50, 0.90);   // deeper blue haze
 
-// ─── Aura geometry (distance from line cursor) ─────────────────────
-const float CORE_WIDTH   = 3.0;    // tight bright core (pixels)
-const float MID_WIDTH    = 10.0;   // close mid glow
-const float OUTER_WIDTH  = 22.0;   // compact outer haze
+// ─── Aura Geometry (distance from line cursor) ─────────────────────────
+const float CORE_WIDTH  = 3.0;    // tight bright core (pixels)
+const float MID_WIDTH   = 10.0;   // close mid glow
+const float OUTER_WIDTH = 22.0;   // compact outer haze
 
-// ─── Aura intensity ──────────────────────────────────────────────────
+// ─── Aura Intensity ────────────────────────────────────────────────────
 const float CORE_INTENSITY  = 0.95;  // concentrated core brightness
 const float MID_INTENSITY   = 0.18;  // subtle mid ring
 const float OUTER_INTENSITY = 0.03;  // barely-there outer haze
 
-// ─── Pulse (lightsaber hum — slower, deeper) ─────────────────────────
+// ─── Pulse (lightsaber hum) ────────────────────────────────────────────
 const float PULSE_FREQ   = 1.8;   // hum frequency (Hz)
 const float PULSE_AMOUNT = 0.06;  // intensity modulation depth
 const float PULSE_DRIFT  = 0.4;   // secondary slow drift frequency
 
-// ─── Trail parameters (longer, smoother) ─────────────────────────────
-const float TRAIL_DURATION   = 0.65;  // trail fade time (seconds)
-const float TRAIL_WIDTH      = 8.0;   // thin trail saber width (pixels)
-const float TRAIL_INTENSITY  = 0.35;  // trail peak brightness
-const float TRAIL_HEAD_BIAS  = 0.85;  // head-to-tail brightness ratio
+// ─── Trail Parameters ──────────────────────────────────────────────────
+const float TRAIL_DURATION  = 0.65;  // trail fade time (seconds)
+const float TRAIL_WIDTH     = 8.0;   // thin trail saber width (pixels)
+const float TRAIL_INTENSITY = 0.35;  // trail peak brightness
+const float TRAIL_HEAD_BIAS = 0.85;  // head-to-tail brightness ratio
 
-// ─── Smooth follow ──────────────────────────────────────────────────
+// ─── Smooth Follow ─────────────────────────────────────────────────────
 // Controls how slowly the aura follows the cursor for saber-like rhythm.
 const float FOLLOW_SPEED = 3.5;    // lower = slower/smoother following
 
-// ─── Helpers ─────────────────────────────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────────────────────
 
 // Cursor center from iCurrentCursor/iPreviousCursor vec4.
-vec2 cursorCellCenter(vec4 c) {
+vec2 cursorCenter(vec4 c) {
     return c.xy + vec2(c.z * 0.5, -c.w * 0.5);
 }
 
 // Cursor as a vertical line segment (for beam cursor shape).
 // Returns (x, y_top, y_bot).
 vec3 cursorLine(vec4 c) {
-    float x = c.x + 1.0;       // 1px in from left edge
-    float y_top = c.y;          // top of cell
-    float y_bot = c.y - c.w;   // bottom of cell
+    float x     = c.x + 1.0;      // 1px in from left edge
+    float y_top = c.y;             // top of cell
+    float y_bot = c.y - c.w;      // bottom of cell
     return vec3(x, y_top, y_bot);
 }
 
@@ -65,19 +70,19 @@ float distToVertLine(vec2 p, vec3 line) {
     return length(vec2(dx, dy));
 }
 
-// Smooth ease-out for trail animation
+// Smooth ease-out for trail animation (cubic).
 float easeOut(float t) {
     float inv = 1.0 - t;
     return 1.0 - inv * inv * inv;
 }
 
-// Slower ease-out for the aura follow — gives the lightsaber weight
+// Slower ease-out for the aura follow — gives the lightsaber weight (quintic).
 float easeOutSlow(float t) {
     float inv = 1.0 - t;
-    return 1.0 - inv * inv * inv * inv * inv;  // quintic
+    return 1.0 - inv * inv * inv * inv * inv;
 }
 
-// Signed distance from point p to line segment (a, b), returns (dist, t)
+// Signed distance from point p to line segment (a, b), returns (dist, t).
 vec2 sdSegment(vec2 p, vec2 a, vec2 b) {
     vec2 pa = p - a;
     vec2 ba = b - a;
@@ -87,26 +92,27 @@ vec2 sdSegment(vec2 p, vec2 a, vec2 b) {
     return vec2(length(pa - ba * h), h);
 }
 
-// Simple pseudo-noise for shimmer
-float hash(vec2 p) {
+// Pseudo-random hash — vec2 in, float out.
+float hash21(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 }
 
+// Organic spatial shimmer for glow variation.
 float shimmer(vec2 p, float t) {
     vec2 cell = floor(p * 0.08);
-    float n = hash(cell + floor(mod(t * 3.0, 256.0)));
+    float n = hash21(cell + floor(mod(t * 3.0, 256.0)));
     return 0.85 + 0.15 * n;
 }
 
-// ─── Main ────────────────────────────────────────────────────────────
+// ─── Main ──────────────────────────────────────────────────────────────
 
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec2 uv = fragCoord / iResolution.xy;
     vec4 original = texture(iChannel0, uv);
 
     // ── Cursor positions ──
-    vec2 cursorCenter = cursorCellCenter(iCurrentCursor);
-    vec2 prevCenter   = cursorCellCenter(iPreviousCursor);
+    vec2 curCenter  = cursorCenter(iCurrentCursor);
+    vec2 prevCenter = cursorCenter(iPreviousCursor);
 
     // ── Line cursor geometry (follows smooth position) ──
     float dt = iTime - iTimeCursorChange;
@@ -119,7 +125,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
 
     // ── Early exit: too far from both aura and any possible trail ──
     float trailProgress = clamp(dt / TRAIL_DURATION, 0.0, 1.0);
-    float moveDistance = length(cursorCenter - prevCenter);
+    float moveDistance = length(curCenter - prevCenter);
     float maxReach = OUTER_WIDTH + moveDistance + TRAIL_WIDTH;
     if (dist > maxReach) {
         fragColor = original;
@@ -128,8 +134,8 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
 
     // ── Pulse modulation (lightsaber hum) ──
     float pulse = 1.0
-        + PULSE_AMOUNT * sin(mod(iTime * PULSE_FREQ, 1.0) * 6.2832)
-        + PULSE_AMOUNT * 0.5 * sin(mod(iTime * PULSE_DRIFT, 1.0) * 6.2832 + 1.0);
+        + PULSE_AMOUNT * sin(mod(iTime * PULSE_FREQ, 1.0) * TAU)
+        + PULSE_AMOUNT * 0.5 * sin(mod(iTime * PULSE_DRIFT, 1.0) * TAU + 1.0);
 
     // ── Shimmer for organic feel ──
     float shim = shimmer(fragCoord, iTime);
@@ -165,15 +171,15 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     if (trailProgress < 1.0 && moveDistance > 1.0) {
         // Animated head/tail positions — slower easing for saber rhythm
         float headProg = easeOutSlow(min(trailProgress * 2.0, 1.0));
-        vec2 headPos = mix(prevCenter, cursorCenter, headProg);
+        vec2 headPos = mix(prevCenter, curCenter, headProg);
 
         float tailProg = easeOut(clamp((trailProgress - 0.15) * 1.8, 0.0, 1.0));
-        vec2 tailPos = mix(prevCenter, cursorCenter, tailProg);
+        vec2 tailPos = mix(prevCenter, curCenter, tailProg);
 
         // Distance from fragment to trail segment
         vec2 seg = sdSegment(fragCoord, tailPos, headPos);
         float distToTrail = seg.x;
-        float trailParam = seg.y; // 0 = tail, 1 = head
+        float trailParam = seg.y;  // 0 = tail, 1 = head
 
         // Spatial fade — sharp core with subtle glow fringe
         float spatialFade = smoothstep(TRAIL_WIDTH, 0.0, distToTrail);

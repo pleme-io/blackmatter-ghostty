@@ -1,4 +1,4 @@
-// Nord Frost — film grain
+// Film Grain — animated frost-tinted noise
 //
 // Extremely subtle animated noise that prevents digital flatness and gives
 // the terminal an organic, cinematic quality. Tinted toward Nord frost-blue
@@ -6,20 +6,26 @@
 //
 // At the default intensity the effect is invisible to conscious perception
 // but the brain registers the screen as more natural and less sterile.
+//
+// Shared functions: luminance, hash23 (see nord-common.glsl)
 
-// ─── Grain parameters ──────────────────────────────────────────────
-const float GRAIN_INTENSITY  = 0.025;  // overall strength (0.02-0.04 sweet spot)
-const float GRAIN_SIZE       = 1.0;    // 1.0 = per-pixel, higher = coarser
-const float GRAIN_SPEED      = 12.0;   // temporal variation rate
-const float FROST_TINT       = 0.15;   // how much grain shifts toward blue (0=neutral)
+// ─── Grain Parameters ──────────────────────────────────────────────────
+const float GRAIN_INTENSITY = 0.025;  // overall strength (0.02-0.04 sweet spot)
+const float GRAIN_SIZE      = 1.0;    // 1.0 = per-pixel, higher = coarser
+const float GRAIN_SPEED     = 12.0;   // temporal variation rate
+const float FROST_TINT      = 0.15;   // how much grain shifts toward blue (0=neutral)
 
-// ─── Nord frost ────────────────────────────────────────────────────
+// ─── Color Palette (Nord Frost Bias) ───────────────────────────────────
 const vec3 FROST_BIAS = vec3(-0.02, 0.01, 0.04);  // subtle blue shift on grain
 
-// ─── Noise ─────────────────────────────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────────────────────
 
-// High-quality hash — three independent channels for color grain
-vec3 hash3(vec2 p, float t) {
+float luminance(vec3 c) {
+    return dot(c, vec3(0.2126, 0.7152, 0.0722));
+}
+
+// Three-channel color grain hash — vec2 + float in, vec3 out.
+vec3 hash23(vec2 p, float t) {
     // Wrap time to prevent float precision loss over hours
     float tw = mod(t, 1000.0);
     vec3 p3 = fract(vec3(p.xyx) * vec3(443.897, 441.423, 437.195));
@@ -31,7 +37,7 @@ vec3 hash3(vec2 p, float t) {
     ));
 }
 
-// ─── Main ──────────────────────────────────────────────────────────
+// ─── Main ──────────────────────────────────────────────────────────────
 
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec2 uv = fragCoord / iResolution.xy;
@@ -44,13 +50,13 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     float timeSeed = floor(iTime * GRAIN_SPEED);
 
     // Three-channel noise centered at 0 (-0.5 to +0.5)
-    vec3 noise = hash3(grainCoord, timeSeed) - 0.5;
+    vec3 noise = hash23(grainCoord, timeSeed) - 0.5;
 
     // Apply frost tint bias — grain skews slightly blue
     noise += FROST_BIAS * FROST_TINT;
 
     // Reduce grain on bright areas (film grain is more visible in shadows)
-    float luma = dot(original.rgb, vec3(0.2126, 0.7152, 0.0722));
+    float luma = luminance(original.rgb);
     float shadowBoost = mix(1.0, 0.4, smoothstep(0.0, 0.8, luma));
 
     // Apply grain

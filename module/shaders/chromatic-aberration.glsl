@@ -1,4 +1,4 @@
-// Nord Frost — edge chromatic aberration
+// Chromatic Aberration — edge color channel separation
 //
 // Subtle color channel separation at screen edges mimicking light refracting
 // through ice crystal or a premium lens. The effect is zero at center and
@@ -9,12 +9,12 @@
 // at the very corners — enough to add perceived depth without affecting
 // text readability.
 
-// ─── Parameters ────────────────────────────────────────────────────
-const float MAX_OFFSET    = 1.5;    // max channel displacement in pixels at corners
-const float POWER         = 2.0;    // radial falloff curve (2.0 = quadratic, natural lens)
-const float FROST_SHIFT   = 0.12;   // blue channel gets extra outward push (ice refraction)
+// ─── Parameters ────────────────────────────────────────────────────────
+const float MAX_OFFSET  = 1.5;   // max channel displacement in pixels at corners
+const float POWER       = 2.0;   // radial falloff curve (2.0 = quadratic, natural lens)
+const float FROST_SHIFT = 0.12;  // blue channel gets extra outward push (ice refraction)
 
-// ─── Main ──────────────────────────────────────────────────────────
+// ─── Main ──────────────────────────────────────────────────────────────
 
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec2 uv = fragCoord / iResolution.xy;

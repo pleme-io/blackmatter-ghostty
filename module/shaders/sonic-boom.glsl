@@ -1,87 +1,106 @@
 // Sonic Boom — shockwave with gravitational collapse and nova aftermath
 //
-// EXPANSION  (0–0.40s)  Rings bloom outward, sparks scatter
-// EXHAUSTION (0.35–0.50s) Rings thin and dim, energy draining away
-// TURBULENCE (0.45–0.60s) Edges fracture, ring breathes erratically
-// COLLAPSE   (0.55–0.95s) Gravitational reversal — sparks spiral inward,
+// EXPANSION  (0-0.40s)  Rings bloom outward, sparks scatter
+// EXHAUSTION (0.35-0.50s) Rings thin and dim, energy draining away
+// TURBULENCE (0.45-0.60s) Edges fracture, ring breathes erratically
+// COLLAPSE   (0.55-0.95s) Gravitational reversal — sparks spiral inward,
 //                          rings compress, heat shimmer distorts the air
-// SINGULARITY(0.90–1.15s) Silent convergence, chromatic afterimage lingers
-// GATHERING  (1.15–2.50s) Energy slowly accumulates at center
-// INSTABILITY(2.50–3.50s) Gathered energy flickers, UV shakes, can't hold
-// NOVA       (3.50–3.70s) Explosion — particles launched outward
-// DRIFT      (3.70–8.00s) Particles coast to screen edges, slowly fading
+// SINGULARITY(0.90-1.15s) Silent convergence, chromatic afterimage lingers
+// GATHERING  (1.15-2.50s) Energy slowly accumulates at center
+// INSTABILITY(2.50-3.50s) Gathered energy flickers, UV shakes, cannot hold
+// NOVA       (3.50-3.70s) Explosion — particles launched outward
+// DRIFT      (3.70-8.00s) Particles coast to screen edges, slowly fading
+//
+// Shared functions: cursorCenter, gaussian, hash11 (see nord-common.glsl)
 
-// ─── Palette ───────────────────────────────────────────────────────
-const vec3  FROST0    = vec3(0.56, 0.74, 0.73);
-const vec3  FROST1    = vec3(0.53, 0.75, 0.87);
-const vec3  AURORA_G  = vec3(0.64, 0.75, 0.55);
-const vec3  AURORA_P  = vec3(0.71, 0.56, 0.68);
-const vec3  AURORA_R  = vec3(0.75, 0.38, 0.42);
-const vec3  WHITE     = vec3(0.93, 0.94, 0.96);
-const vec3  DEEP_BLUE = vec3(0.28, 0.35, 0.52);
-const vec3  HOT_CORE  = vec3(0.80, 0.88, 0.95);
+// ─── Constants ─────────────────────────────────────────────────────────
+const float TAU = 6.2832;
 
-// ─── Rings ─────────────────────────────────────────────────────────
-const float R1_MAX = 130.0;   const float R1_W = 4.0;   const float R1_I = 0.22;
-const float R2_MAX = 90.0;    const float R2_W = 6.0;   const float R2_I = 0.11;
-const float R3_MAX = 55.0;    const float R3_W = 12.0;  const float R3_I = 0.05;
+// ─── Color Palette (Nord) ──────────────────────────────────────────────
+const vec3 FROST_0      = vec3(0.56, 0.74, 0.73);  // #8FBCBB
+const vec3 FROST_1      = vec3(0.53, 0.75, 0.87);  // #88C0D0 (slightly brighter)
+const vec3 AURORA_GREEN = vec3(0.64, 0.75, 0.55);  // #A3BE8C
+const vec3 AURORA_PURPLE = vec3(0.71, 0.56, 0.68); // #B48EAD
+const vec3 AURORA_RED   = vec3(0.75, 0.38, 0.42);  // #BF616A
+const vec3 SNOW_WHITE   = vec3(0.93, 0.94, 0.96);  // #ECEFF4
+const vec3 DEEP_BLUE    = vec3(0.28, 0.35, 0.52);  // deep polar blue
+const vec3 HOT_CORE     = vec3(0.80, 0.88, 0.95);  // white-hot center
+
+// ─── Rings ─────────────────────────────────────────────────────────────
+const float R1_MAX     = 130.0;  const float R1_W = 4.0;   const float R1_I = 0.22;
+const float R2_MAX     = 90.0;   const float R2_W = 6.0;   const float R2_I = 0.11;
+const float R3_MAX     = 55.0;   const float R3_W = 12.0;  const float R3_I = 0.05;
 const float R1_DISTORT = 5.0;
 const float R2_DELAY   = 0.04;   const float R2_CHROMA = 3.5;
 const float R3_DELAY   = 0.08;
 
-// ─── Particles ─────────────────────────────────────────────────────
-const float SPARK_N = 20.0;     const float SPARK_I = 0.35;   const float SPARK_SZ = 2.2;
-const float SPARK_DIST = 110.0; const float SPARK_SPREAD = 0.6;
-const float DUST_N  = 8.0;      const float DUST_I  = 0.018;  const float DUST_SZ = 1.4;
-const float GLOW_R  = 28.0;     const float GLOW_I  = 0.06;
+// ─── Particles ─────────────────────────────────────────────────────────
+const float SPARK_N    = 20.0;   const float SPARK_I  = 0.35;  const float SPARK_SZ = 2.2;
+const float SPARK_DIST = 110.0;  const float SPARK_SPREAD = 0.6;
+const float DUST_N     = 8.0;    const float DUST_I   = 0.018; const float DUST_SZ = 1.4;
+const float GLOW_R     = 28.0;   const float GLOW_I   = 0.06;
 
-// ─── Atmospheric ───────────────────────────────────────────────────
+// ─── Atmospheric ───────────────────────────────────────────────────────
 const float GRAV_DISTORT   = 8.0;
 const float SHIMMER_AMP    = 1.2;
 const float AFTERIMAGE_I   = 0.022;
-const float AFTERIMAGE_SEP = 0.8;   // chromatic separation (px)
+const float AFTERIMAGE_SEP = 0.8;  // chromatic separation (px)
 
-// ─── Phase timing (seconds, relative to cursor change) ─────────────
-const float T_TOTAL   = 1.15;  const float T_DELAY   = 0.025;
-const float T_EXPAND  = 0.40;  const float T_EXHAUST = 0.35;
-const float T_TURB    = 0.45;  const float T_COLLAPSE = 0.55;
+// ─── Phase Timing (seconds, relative to cursor change) ─────────────────
+const float T_TOTAL    = 1.15;  const float T_DELAY    = 0.025;
+const float T_EXPAND   = 0.40;  const float T_EXHAUST  = 0.35;
+const float T_TURB     = 0.45;  const float T_COLLAPSE = 0.55;
 const float T_SINGULAR = 0.90;
 
-// ─── Post-singularity timing (absolute seconds from T_DELAY) ──────
-const float T_GATHER    = 1.15;
-const float T_UNSTABLE  = 2.50;
-const float T_NOVA      = 3.50;
-const float T_DRIFT     = 3.70;
-const float T_ANIM_END  = 8.00;
+// ─── Post-Singularity Timing (absolute seconds from T_DELAY) ───────────
+const float T_GATHER   = 1.15;
+const float T_UNSTABLE = 2.50;
+const float T_NOVA     = 3.50;
+const float T_DRIFT    = 3.70;
+const float T_ANIM_END = 8.00;
 
-// ─── Nova parameters ──────────────────────────────────────────────
-const float NOVA_N       = 45.0;    // drift particles
-const float NOVA_V_MIN   = 60.0;    // min launch velocity px/s
-const float NOVA_V_MAX   = 180.0;   // max launch velocity px/s
-const float NOVA_DRAG    = 0.88;    // velocity retention per second (friction)
-const float NOVA_FLASH_I = 0.35;    // center flash peak intensity
-const float NOVA_RING_V  = 280.0;   // shockwave ring speed px/s
-const float NOVA_RING_W  = 3.0;     // shockwave ring width
-const float GATHER_WISPS = 5.0;     // orbiting energy wisps during gathering
+// ─── Nova Parameters ───────────────────────────────────────────────────
+const float NOVA_N       = 45.0;   // drift particles
+const float NOVA_V_MIN   = 60.0;   // min launch velocity px/s
+const float NOVA_V_MAX   = 180.0;  // max launch velocity px/s
+const float NOVA_DRAG    = 0.88;   // velocity retention per second (friction)
+const float NOVA_FLASH_I = 0.35;   // center flash peak intensity
+const float NOVA_RING_V  = 280.0;  // shockwave ring speed px/s
+const float NOVA_RING_W  = 3.0;    // shockwave ring width
+const float GATHER_WISPS = 5.0;    // orbiting energy wisps during gathering
 
+// ─── Normalized Phase Thresholds ───────────────────────────────────────
 #define N_EXPAND   (T_EXPAND   / T_TOTAL)
 #define N_EXHAUST  (T_EXHAUST  / T_TOTAL)
 #define N_TURB     (T_TURB     / T_TOTAL)
 #define N_COLLAPSE (T_COLLAPSE / T_TOTAL)
 #define N_SINGULAR (T_SINGULAR / T_TOTAL)
 
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
 // Primitives
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
 
-vec2  cursorCenter(vec4 c) { return c.xy + vec2(c.z * 0.5, -c.w * 0.5); }
-float gaussian(float d, float w) { return exp(-0.5 * d * d / (w * w)); }
-float ringAt(float d, float r, float w) { return gaussian(abs(d - r), w); }
-float hash(float n) { return fract(sin(n) * 43758.5453123); }
+vec2 cursorCenter(vec4 c) {
+    return c.xy + vec2(c.z * 0.5, -c.w * 0.5);
+}
 
-// ═══════════════════════════════════════════════════════════════════
-// Original phase system (expansion → singularity)
-// ═══════════════════════════════════════════════════════════════════
+float gaussian(float d, float w) {
+    return exp(-0.5 * d * d / (w * w));
+}
+
+// Ring shape — gaussian centered at radius r with width w.
+float ringAt(float d, float r, float w) {
+    return gaussian(abs(d - r), w);
+}
+
+// Scalar hash — float in, float out.
+float hash11(float n) {
+    return fract(sin(n) * 43758.5453123);
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Phase System (expansion -> singularity)
+// ═══════════════════════════════════════════════════════════════════════
 
 float collapseProgress(float n) {
     return clamp((n - N_COLLAPSE) / (1.0 - N_COLLAPSE), 0.0, 1.0);
@@ -91,15 +110,18 @@ float singularityProgress(float n) {
     return clamp((n - N_SINGULAR) / (1.0 - N_SINGULAR), 0.0, 1.0);
 }
 
-// Radius: 0 → 1 → 0 (ease-out expand, cubic ease-in collapse)
+// Radius: 0 -> 1 -> 0 (ease-out expand, cubic ease-in collapse).
 float phaseCurve(float n) {
-    if (n < N_EXPAND) { float e = n / N_EXPAND; return 1.0 - (1.0 - e) * (1.0 - e); }
+    if (n < N_EXPAND) {
+        float e = n / N_EXPAND;
+        return 1.0 - (1.0 - e) * (1.0 - e);
+    }
     if (n < N_COLLAPSE) return 1.0;
     float c = collapseProgress(n);
     return 1.0 - c * c * c;
 }
 
-// Energy: drains at exhaustion, reignites during collapse
+// Energy: drains at exhaustion, reignites during collapse.
 float energyEnvelope(float n) {
     float drain = 1.0 - 0.4 * smoothstep(N_EXHAUST, N_COLLAPSE, n)
                       * (1.0 - smoothstep(N_COLLAPSE, N_COLLAPSE + 0.08, n));
@@ -107,21 +129,23 @@ float energyEnvelope(float n) {
     return drain * (1.0 + cp * cp * 1.5);
 }
 
-// Ring width loss at peak expansion (energy exhaustion)
+// Ring width loss at peak expansion (energy exhaustion).
 float exhaustionThin(float n) {
     return mix(1.0, 0.6, smoothstep(N_EXHAUST, N_COLLAPSE, n)
                        * (1.0 - smoothstep(N_COLLAPSE, N_COLLAPSE + 0.1, n)));
 }
 
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
 // Turbulence
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
 
 float fracture(float n, float t, float angle) {
     float onset = smoothstep(N_TURB, N_COLLAPSE + 0.1, n);
     float fade  = 1.0 - smoothstep(0.75, 1.0, collapseProgress(n));
-    float wobble  = sin(angle * 3.0 + t * 8.0) * 0.4 + sin(angle * 5.0 - t * 12.0) * 0.3;
-    float shatter = sin(angle * 11.0 + t * 19.0) * 0.35 + sin(angle * 17.0 - t * 31.0) * 0.25;
+    float wobble  = sin(angle * 3.0 + t * 8.0) * 0.4
+                  + sin(angle * 5.0 - t * 12.0) * 0.3;
+    float shatter = sin(angle * 11.0 + t * 19.0) * 0.35
+                  + sin(angle * 17.0 - t * 31.0) * 0.25;
     return onset * fade * mix(wobble, wobble + shatter, smoothstep(N_TURB, N_COLLAPSE + 0.15, n));
 }
 
@@ -132,7 +156,8 @@ float ringBreathe(float n, float t) {
 }
 
 float arcThickness(float angle, float t) {
-    return 1.0 + 0.15 * sin(angle * 4.0 + t * 3.0) + 0.10 * sin(angle * 7.0 - t * 5.0);
+    return 1.0 + 0.15 * sin(angle * 4.0 + t * 3.0)
+               + 0.10 * sin(angle * 7.0 - t * 5.0);
 }
 
 void turbulentRing(float n, float t, float angle, inout float r, inout float w) {
@@ -143,11 +168,11 @@ void turbulentRing(float n, float t, float angle, inout float r, inout float w) 
     w *= arcThickness(angle, t);
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// Atmospheric effects
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+// Atmospheric Effects
+// ═══════════════════════════════════════════════════════════════════════
 
-// Heat shimmer — UV wobble in inter-ring space
+// Heat shimmer — UV wobble in inter-ring space.
 vec2 heatShimmer(float n, float t, float dist, float ph, vec2 fc, vec2 res) {
     if (n <= N_TURB || n >= N_SINGULAR + 0.05) return vec2(0.0);
     float strength = smoothstep(N_TURB, N_COLLAPSE + 0.1, n)
@@ -159,16 +184,16 @@ vec2 heatShimmer(float n, float t, float dist, float ph, vec2 fc, vec2 res) {
     return s * SHIMMER_AMP * strength * zone / res;
 }
 
-// Aurora color blend with collapse blueshift
+// Aurora color blend with collapse blueshift.
 vec3 auroraColor(float angle, float t, float cp, bool col) {
-    float hue = fract(angle / 6.2832 + 0.5 + t * 0.05);
-    vec3 c = mix(AURORA_G, AURORA_P, smoothstep(0.25, 0.75, hue));
-    c = mix(c, FROST0, smoothstep(0.75, 1.0, hue));
+    float hue = fract(angle / TAU + 0.5 + t * 0.05);
+    vec3 c = mix(AURORA_GREEN, AURORA_PURPLE, smoothstep(0.25, 0.75, hue));
+    c = mix(c, FROST_0, smoothstep(0.75, 1.0, hue));
     if (col) c = mix(c, DEEP_BLUE, cp * 0.65);
     return c;
 }
 
-// Chromatic ghost ring — RGB channel separation
+// Chromatic ghost ring — RGB channel separation.
 vec3 chromaticRing(float dist, float radius, float width, float sep, float fade) {
     return vec3(
         ringAt(dist - sep, radius, width) * 0.9,
@@ -177,39 +202,39 @@ vec3 chromaticRing(float dist, float radius, float width, float sep, float fade)
     ) * AFTERIMAGE_I * fade;
 }
 
-// Color temperature: frost → deep blue → hot white
+// Color temperature: frost -> deep blue -> hot white.
 vec3 phaseTint(float cp, float sp) {
-    vec3 c = FROST1;
-    if (cp > 0.0) c = mix(FROST1, DEEP_BLUE, min(cp, 0.55));
+    vec3 c = FROST_1;
+    if (cp > 0.0) c = mix(FROST_1, DEEP_BLUE, min(cp, 0.55));
     if (sp > 0.0) c = mix(c, HOT_CORE, sp * 0.4);
     return c;
 }
 
-// ═══════════════════════════════════════════════════════════════════
-// Post-singularity: gathering → instability → nova → drift
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+// Post-Singularity: gathering -> instability -> nova -> drift
+// ═══════════════════════════════════════════════════════════════════════
 
-// Per-event seed — different each cursor change
+// Per-event seed — different each cursor change.
 float eventSeed(float tCursorChange) {
     return fract(tCursorChange * 137.531 + 0.7);
 }
 
-// Gathering: slow energy buildup at center with orbiting wisps
+// Gathering: slow energy buildup at center with orbiting wisps.
 float gatherGlow(float t, float dist) {
     float p = smoothstep(T_GATHER, T_UNSTABLE, t);
     float pulse = 1.0 + 0.15 * sin(t * 3.14 * mix(0.5, 4.0, p * p));
     return p * pulse * 0.12 * smoothstep(22.0, 0.0, dist);
 }
 
-// Gathering wisps — small bright dots orbiting tight around center
+// Gathering wisps — small bright dots orbiting tight around center.
 float gatherWisps(float t, float dist, vec2 fragCoord, vec2 ctr) {
     if (t < T_GATHER || t > T_NOVA) return 0.0;
     float p = smoothstep(T_GATHER, T_UNSTABLE, t);
     float acc = 0.0;
     for (float i = 0.0; i < GATHER_WISPS; i += 1.0) {
-        float phase = (i / GATHER_WISPS) * 6.2832;
+        float phase = (i / GATHER_WISPS) * TAU;
         float speed = mix(1.5, 6.0, p);
-        float orbit = mix(18.0, 5.0, p * p);   // tighten as instability grows
+        float orbit = mix(18.0, 5.0, p * p);  // tighten as instability grows
         float a = phase + t * speed + sin(t * 2.3 + i * 1.7) * 0.4;
         vec2 wp = ctr + vec2(cos(a), sin(a)) * orbit;
         float wd = length(fragCoord - wp);
@@ -218,13 +243,13 @@ float gatherWisps(float t, float dist, vec2 fragCoord, vec2 ctr) {
     return acc;
 }
 
-// Instability: flicker multiplier + UV shake offset
+// Instability: flicker multiplier + UV shake offset.
 float instabilityFlicker(float t, float ev) {
     if (t < T_UNSTABLE || t > T_NOVA + 0.1) return 1.0;
     float p = smoothstep(T_UNSTABLE, T_NOVA, t);
     // Hash-based flicker — frequency accelerates as instability grows
     float freq = mix(12.0, 45.0, p * p);
-    float flick = hash(floor(t * freq) * 73.0 + ev * 1000.0);
+    float flick = hash11(floor(t * freq) * 73.0 + ev * 1000.0);
     return mix(1.0, mix(0.3, 1.6, flick), p * 0.8);
 }
 
@@ -232,10 +257,11 @@ vec2 instabilityShake(float t) {
     if (t < T_UNSTABLE || t > T_NOVA + 0.05) return vec2(0.0);
     float p = smoothstep(T_UNSTABLE, T_NOVA, t);
     float amp = p * p * 2.5;
-    return vec2(sin(t * 67.0 + 1.0) + sin(t * 97.0), sin(t * 83.0) + sin(t * 113.0)) * amp;
+    return vec2(sin(t * 67.0 + 1.0) + sin(t * 97.0),
+                sin(t * 83.0) + sin(t * 113.0)) * amp;
 }
 
-// Nova flash — bright center burst
+// Nova flash — bright center burst.
 float novaFlash(float t, float dist) {
     if (t < T_NOVA || t > T_NOVA + 0.25) return 0.0;
     float rise = smoothstep(T_NOVA, T_NOVA + 0.04, t);
@@ -243,7 +269,7 @@ float novaFlash(float t, float dist) {
     return rise * fall * NOVA_FLASH_I * smoothstep(50.0, 0.0, dist);
 }
 
-// Nova shockwave ring — fast expanding ring
+// Nova shockwave ring — fast expanding ring.
 float novaRing(float t, float dist) {
     if (t < T_NOVA || t > T_NOVA + 0.8) return 0.0;
     float dt = t - T_NOVA;
@@ -252,32 +278,32 @@ float novaRing(float t, float dist) {
     return ringAt(dist, radius, NOVA_RING_W + dt * 4.0) * 0.15 * fade;
 }
 
-// Drift particles — launched at nova, coast outward with friction
+// Drift particles — launched at nova, coast outward with friction.
 vec3 driftParticles(float t, vec2 fragCoord, vec2 ctr, float ev, vec2 res) {
     if (t < T_NOVA) return vec3(0.0);
     float dt = t - T_NOVA;
     float fade = 1.0 - smoothstep(T_DRIFT, T_ANIM_END, t);
     if (fade <= 0.0) return vec3(0.0);
 
-    // -ln(NOVA_DRAG) for friction integral
+    // Friction integral constant: -ln(NOVA_DRAG)
     float dragLog = -log(NOVA_DRAG);
 
     vec3 acc = vec3(0.0);
     for (float i = 0.0; i < NOVA_N; i += 1.0) {
-        float s1 = hash(ev * 1000.0 + i * 73.0);    // angle
-        float s2 = hash(ev * 2000.0 + i * 137.0);   // velocity
-        float s3 = hash(ev * 3000.0 + i * 41.0);    // size
-        float s4 = hash(ev * 4000.0 + i * 97.0);    // color hue
-        float s5 = hash(ev * 5000.0 + i * 59.0);    // slight angle wobble
+        float s1 = hash11(ev * 1000.0 + i * 73.0);   // angle
+        float s2 = hash11(ev * 2000.0 + i * 137.0);   // velocity
+        float s3 = hash11(ev * 3000.0 + i * 41.0);    // size
+        float s4 = hash11(ev * 4000.0 + i * 97.0);    // color hue
+        float s5 = hash11(ev * 5000.0 + i * 59.0);    // slight angle wobble
 
-        float a = s1 * 6.2832 + s5 * 0.3;
+        float a = s1 * TAU + s5 * 0.3;
         float vel = mix(NOVA_V_MIN, NOVA_V_MAX, s2);
 
         // Distance = integral of vel * drag^t from 0 to dt
         float friction_t = pow(NOVA_DRAG, dt);
         float traveled = vel * (1.0 - friction_t) / dragLog;
 
-        // Slight curve — particles don't go perfectly straight
+        // Slight curve — particles do not go perfectly straight
         float curve = sin(dt * 0.8 + s5 * 6.0) * 4.0 * s5;
         vec2 pos = ctr + vec2(cos(a), sin(a)) * traveled
                        + vec2(-sin(a), cos(a)) * curve;
@@ -296,20 +322,20 @@ vec3 driftParticles(float t, vec2 fragCoord, vec2 ctr, float ev, vec2 res) {
 
         // Color: per-particle random from palette
         vec3 color;
-        if (s4 < 0.25)      color = FROST0;
-        else if (s4 < 0.45) color = FROST1;
-        else if (s4 < 0.65) color = AURORA_G;
-        else if (s4 < 0.80) color = AURORA_P;
-        else                 color = mix(WHITE, HOT_CORE, s4);
+        if      (s4 < 0.25) color = FROST_0;
+        else if (s4 < 0.45) color = FROST_1;
+        else if (s4 < 0.65) color = AURORA_GREEN;
+        else if (s4 < 0.80) color = AURORA_PURPLE;
+        else                 color = mix(SNOW_WHITE, HOT_CORE, s4);
 
         acc += color * brightness;
     }
     return acc;
 }
 
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
 // Main
-// ═══════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
 
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     float elapsed = iTime - iTimeCursorChange;
@@ -318,14 +344,14 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
         return;
     }
 
-    // ── Geometry ─────────────────────────────────────────────────
+    // ── Geometry ──
     vec2  ctr   = cursorCenter(iCurrentCursor);
     vec2  d     = fragCoord - ctr;
     float dist  = length(d);
     vec2  dir   = dist > 0.5 ? normalize(d) : vec2(0.0, 1.0);
     float angle = atan(d.y, d.x);
 
-    // ── Phase state ─────────────────────────────────────────────
+    // ── Phase state ──
     float t   = elapsed - T_DELAY;
     float n   = t / T_TOTAL;
     float ph  = phaseCurve(n);
@@ -338,8 +364,8 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     // Per-event randomization seed
     float ev = eventSeed(iTimeCursorChange);
 
-    // ── UV distortion layers ────────────────────────────────────
-    vec2 shimmer = heatShimmer(n, t, dist, ph, fragCoord, iResolution.xy);
+    // ── UV distortion layers ──
+    vec2 shimmerOff = heatShimmer(n, t, dist, ph, fragCoord, iResolution.xy);
 
     // Instability UV shake (post-singularity)
     vec2 shake = instabilityShake(t) / iResolution.xy;
@@ -359,13 +385,13 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     }
 
     vec2 uv = fragCoord / iResolution.xy;
-    vec4 orig = texture(iChannel0, clamp(uv + dir * (uvShift + grav) + shimmer + shake,
+    vec4 orig = texture(iChannel0, clamp(uv + dir * (uvShift + grav) + shimmerOff + shake,
                                          vec2(0.0), vec2(1.0)));
 
-    // ── Ring 1: primary ─────────────────────────────────────────
+    // ── Ring 1: primary ──
     float ring1 = r1 * R1_I * en * br;
 
-    // ── Ring 2: chromatic ───────────────────────────────────────
+    // ── Ring 2: chromatic ──
     vec3 ring2 = vec3(0.0);
     if (t > R2_DELAY && t < T_GATHER) {
         float r2r = ph * R2_MAX, r2w = R2_W;
@@ -377,7 +403,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
               * R2_I * en * br;
     }
 
-    // ── Ring 3: aurora ──────────────────────────────────────────
+    // ── Ring 3: aurora ──
     float r3v = 0.0;
     vec3  ring3 = vec3(0.0);
     if (t > R3_DELAY && t < T_GATHER) {
@@ -390,13 +416,13 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
         ring3 = auroraColor(angle, t, cp, col) * r3v * R3_I * en;
     }
 
-    // ── Sparks ──────────────────────────────────────────────────
+    // ── Sparks ──
     float sparks = 0.0;
     if (t > 0.0 && n < N_SINGULAR + 0.05) {
         float sFade = 1.0 - smoothstep(0.7, N_SINGULAR, n);
         for (float i = 0.0; i < SPARK_N; i += 1.0) {
-            float seed = hash(i * 137.0 + 0.5);
-            float sa = (i / SPARK_N) * 6.2832 + seed * 1.5;
+            float seed = hash11(i * 137.0 + 0.5);
+            float sa = (i / SPARK_N) * TAU + seed * 1.5;
             float sr = ph * SPARK_DIST * (1.0 + (seed - 0.5) * SPARK_SPREAD);
             if (col) {
                 sa += cp * cp * 2.5 * (seed > 0.5 ? 1.0 : -1.0);
@@ -408,13 +434,13 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
         }
     }
 
-    // ── Dust ────────────────────────────────────────────────────
+    // ── Dust ──
     float dust = 0.0;
     if (t > 0.1 && n < 1.3) {
         float life = smoothstep(0.1, 0.25, n) * (1.0 - smoothstep(0.9, 1.3, n));
         for (float i = 0.0; i < DUST_N; i += 1.0) {
-            float seed = hash(i * 73.0 + 11.0);
-            float da = (i / DUST_N) * 6.2832 + seed * 3.0 + sin(t * 1.5 + seed * 10.0) * 0.3;
+            float seed = hash11(i * 73.0 + 11.0);
+            float da = (i / DUST_N) * TAU + seed * 3.0 + sin(t * 1.5 + seed * 10.0) * 0.3;
             float dr = t * 25.0 * (0.6 + seed * 0.8);
             float dd = length(fragCoord - ctr - vec2(cos(da), sin(da)) * dr);
             float sz = DUST_SZ * (0.8 + seed * 0.4);
@@ -422,14 +448,16 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
         }
     }
 
-    // ── Glow ────────────────────────────────────────────────────
+    // ── Glow ──
     float glow = GLOW_I * smoothstep(GLOW_R, 0.0, dist) * (1.0 - smoothstep(0.0, 0.4, n));
     if (col) glow += GLOW_I * 3.0 * cp * cp * smoothstep(GLOW_R * (1.0 - cp * 0.8), 0.0, dist);
 
-    // ── Singularity ─────────────────────────────────────────────
-    float sing = (sp > 0.0) ? 0.3 * smoothstep(8.0 * (1.0 - sp * sp), 0.0, dist) * (1.0 - sp) : 0.0;
+    // ── Singularity ──
+    float sing = (sp > 0.0)
+        ? 0.3 * smoothstep(8.0 * (1.0 - sp * sp), 0.0, dist) * (1.0 - sp)
+        : 0.0;
 
-    // ── Afterimage ──────────────────────────────────────────────
+    // ── Afterimage ──
     vec3 aiColor = vec3(0.0);
     float aiVal  = 0.0;
 
@@ -447,7 +475,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
         aiVal   += dot(ext, vec3(0.33));
     }
 
-    // ── Post-singularity: gathering + instability ────────────────
+    // ── Post-singularity: gathering + instability ──
     float gather  = gatherGlow(t, dist);
     float wisps   = gatherWisps(t, dist, fragCoord, ctr);
     float flicker = instabilityFlicker(t, ev);
@@ -458,25 +486,25 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     gather *= flicker;
     wisps  *= flicker;
 
-    // ── Drift particles ─────────────────────────────────────────
+    // ── Drift particles ──
     vec3 drift = driftParticles(t, fragCoord, ctr, ev, iResolution.xy);
 
-    // ── Compose ─────────────────────────────────────────────────
+    // ── Composite ──
     // Fade original phases out after singularity so gathering starts clean
     float origFade = 1.0 - smoothstep(T_GATHER, T_GATHER + 0.3, t);
 
     vec3 tint = phaseTint(cp, sp);
     vec3 fx   = (tint * ring1
               + ring2 + ring3
-              + mix(FROST1, WHITE, 0.5) * sparks
-              + FROST1 * dust
-              + mix(FROST0, HOT_CORE, cp * 0.3) * glow
+              + mix(FROST_1, SNOW_WHITE, 0.5) * sparks
+              + FROST_1 * dust
+              + mix(FROST_0, HOT_CORE, cp * 0.3) * glow
               + HOT_CORE * sing
               + aiColor) * origFade
               + HOT_CORE * gather
-              + WHITE * wisps
-              + WHITE * flash
-              + FROST1 * nRing
+              + SNOW_WHITE * wisps
+              + SNOW_WHITE * flash
+              + FROST_1 * nRing
               + drift;
 
     float total = (ring1 + dot(ring2, vec3(0.33)) + r3v * R3_I * en

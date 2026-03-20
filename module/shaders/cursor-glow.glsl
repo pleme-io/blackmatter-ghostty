@@ -1,43 +1,48 @@
 // Cursor Glow — vertical bar core + radial frost-blue aura
 //
 // A thin glowing bar (matching line-cursor aesthetic) at the cursor
-// center, surrounded by a soft radial halo.  The bar spans the full
-// cell height.  Two-layer radial bloom radiates outward from the bar.
+// center, surrounded by a soft radial halo. The bar spans the full
+// cell height. Two-layer radial bloom radiates outward from the bar.
 // Slow 1Hz breathing pulse.
 //
 // Coordinate convention (Ghostty shadertoy_prefix.glsl):
 //   iCurrentCursor.xy  = top-left of cursor cell (GL coords)
 //   iCurrentCursor.zw  = cell width, height
+//
+// Shared functions: cursorCenter (see nord-common.glsl)
 
-// ─── Color palette (Nord frost) ────────────────────────────────────
+// ─── Constants ─────────────────────────────────────────────────────────
+const float TAU = 6.2832;
+
+// ─── Color Palette (Nord Frost) ────────────────────────────────────────
 const vec3 BAR_COLOR   = vec3(0.80, 0.94, 1.0);   // near-white cyan
 const vec3 INNER_COLOR = vec3(0.53, 0.75, 0.98);   // Nord frost8
 const vec3 OUTER_COLOR = vec3(0.32, 0.55, 0.88);   // deeper frost blue
 
-// ─── Bar geometry ────────────────────────────────────────────────────
-const float BAR_HALF_WIDTH = 1.2;     // half-width of the bright bar (pixels)
-const float BAR_SOFTNESS   = 2.5;     // horizontal falloff (pixels)
+// ─── Bar Geometry ──────────────────────────────────────────────────────
+const float BAR_HALF_WIDTH = 1.2;   // half-width of the bright bar (pixels)
+const float BAR_SOFTNESS   = 2.5;   // horizontal falloff (pixels)
 
-// ─── Halo geometry ───────────────────────────────────────────────────
+// ─── Halo Geometry ─────────────────────────────────────────────────────
 const float INNER_RADIUS = 24.0;    // mid bloom
 const float OUTER_RADIUS = 55.0;    // soft outer reach
 
-// ─── Intensity ───────────────────────────────────────────────────────
+// ─── Intensity ─────────────────────────────────────────────────────────
 const float BAR_INTENSITY   = 0.55;  // bar brightness
 const float INNER_INTENSITY = 0.14;  // gentle mid glow
 const float OUTER_INTENSITY = 0.04;  // whisper-level haze
 
-// ─── Pulse (slow breathing) ──────────────────────────────────────────
+// ─── Pulse (slow breathing) ────────────────────────────────────────────
 const float PULSE_FREQ   = 1.0;    // Hz
 const float PULSE_AMOUNT = 0.06;   // subtle modulation
 
-// ─── Helpers ─────────────────────────────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────────────────────
 
 vec2 cursorCenter(vec4 c) {
     return c.xy + vec2(c.z * 0.5, -c.w * 0.5);
 }
 
-// ─── Main ────────────────────────────────────────────────────────────
+// ─── Main ──────────────────────────────────────────────────────────────
 
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec4 original = texture(iChannel0, fragCoord / iResolution.xy);
@@ -56,7 +61,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     float cellBottom = iCurrentCursor.y - iCurrentCursor.w;
 
     // Breathing pulse
-    float phase = mod(iTime * PULSE_FREQ, 1.0) * 6.2832;
+    float phase = mod(iTime * PULSE_FREQ, 1.0) * TAU;
     float pulse = 1.0 + PULSE_AMOUNT * sin(phase);
 
     // ── Bar core: vertical line spanning cell height ──
@@ -67,7 +72,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
                    * smoothstep(cellTop + 2.0, cellTop - 2.0, fragCoord.y);
     float bar = BAR_INTENSITY * barMask * vertFade;
 
-    // ── Radial halo (unchanged) ──
+    // ── Radial halo ──
     float inner = INNER_INTENSITY * smoothstep(INNER_RADIUS, BAR_HALF_WIDTH * 2.0, dist);
     float outer = OUTER_INTENSITY * exp(-3.0 * (dist * dist) / (OUTER_RADIUS * OUTER_RADIUS));
 

@@ -1,15 +1,15 @@
 // Screen Curvature — subtle barrel distortion for depth
 //
 // Adds a very gentle barrel distortion to simulate the curvature of
-// a physical display.  Creates a sense of depth and immersion without
-// being distracting.  Strongest at corners, invisible at center.
+// a physical display. Creates a sense of depth and immersion without
+// being distracting. Strongest at corners, invisible at center.
 // No animation — pure geometry.
 
-// ─── Geometry ────────────────────────────────────────────────────
-const float CURVATURE     = 0.012;   // distortion strength (keep small!)
-const float CORNER_DARK   = 0.025;   // subtle corner darkening
+// ─── Geometry ──────────────────────────────────────────────────────────
+const float CURVATURE   = 0.012;  // distortion strength (keep small!)
+const float CORNER_DARK = 0.025;  // subtle corner darkening
 
-// ─── Main ────────────────────────────────────────────────────────
+// ─── Main ──────────────────────────────────────────────────────────────
 
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec2 uv = fragCoord / iResolution.xy;
@@ -17,7 +17,7 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     // Center UV to -1..1 range
     vec2 centered = uv * 2.0 - 1.0;
 
-    // Barrel distortion — r² pushes pixels outward from center
+    // Barrel distortion — r-squared pushes pixels outward from center
     float r2 = dot(centered, centered);
     vec2 distorted = centered * (1.0 + CURVATURE * r2);
 

@@ -1,6 +1,6 @@
 // Prompt Saber — thick lightsaber underline for shell prompts
 //
-// A glowing horizontal plasma beam that appears beneath the cursor's row
+// A glowing horizontal plasma beam that appears beneath the cursor row
 // when the terminal detects a shell prompt. Uses content-aware heuristics
 // to distinguish prompts from TUI applications: in vim, htop, less, etc.
 // the effect gracefully fades to zero — no visual artifacts.
@@ -15,74 +15,80 @@
 //   iCurrentCursor.xy = top-left corner of cursor cell (GL coords: y=top edge)
 //   iCurrentCursor.zw = width, height of cursor cell
 //   NO Y-flip needed.
+//
+// Shared functions: luminance, hash21, shimmer (see nord-common.glsl)
 
-// ─── Saber palette (Nord frost) ────────────────────────────────────
+// ─── Constants ─────────────────────────────────────────────────────────
+const float TAU = 6.2832;
+
+// ─── Color Palette (Nord Frost) ────────────────────────────────────────
 const vec3 CORE_COLOR  = vec3(0.88, 0.97, 1.0);   // white-hot plasma center
 const vec3 INNER_COLOR = vec3(0.53, 0.75, 0.93);   // frost blue containment
 const vec3 OUTER_COLOR = vec3(0.25, 0.45, 0.82);   // deep blue ambient haze
 
-// ─── Beam geometry ─────────────────────────────────────────────────
+// ─── Beam Geometry ─────────────────────────────────────────────────────
 const float CORE_HALF   = 1.5;    // half-height of bright core (pixels)
 const float INNER_HALF  = 8.0;    // half-height of inner glow
 const float OUTER_HALF  = 24.0;   // half-height of outer haze
 const float BEAM_OFFSET = 1.0;    // gap below cursor cell bottom edge (pixels)
 
-// ─── Intensity ─────────────────────────────────────────────────────
+// ─── Intensity ─────────────────────────────────────────────────────────
 const float CORE_INTENSITY  = 0.85;   // plasma core brightness
 const float INNER_INTENSITY = 0.28;   // containment glow brightness
 const float OUTER_INTENSITY = 0.055;  // ambient haze brightness
 
-// ─── Cursor focal bloom ───────────────────────────────────────────
+// ─── Cursor Focal Bloom ────────────────────────────────────────────────
 // Brighter spot under the cursor — the blade's active point.
 const float FOCAL_RADIUS    = 40.0;   // horizontal spread (pixels)
 const float FOCAL_INTENSITY = 0.12;   // extra brightness at cursor center
 
-// ─── Pulse (lightsaber hum) ────────────────────────────────────────
+// ─── Pulse (lightsaber hum) ────────────────────────────────────────────
 const float PULSE_FREQ   = 1.2;    // primary hum frequency (Hz)
 const float PULSE_AMOUNT = 0.07;   // intensity modulation depth
 const float PULSE_DRIFT  = 0.35;   // secondary slow drift frequency (Hz)
 
-// ─── Energy ripple (traveling brightness wave) ─────────────────────
+// ─── Energy Ripple (traveling brightness wave) ─────────────────────────
 const float RIPPLE_SPEED     = 1.8;   // phase speed (units/sec)
 const float RIPPLE_SCALE     = 0.012; // spatial frequency (cycles/pixel)
 const float RIPPLE_SHARPNESS = 3.0;   // exponent — higher = tighter pulses
 const float RIPPLE_STRENGTH  = 0.15;  // brightness modulation depth
 
-// ─── Edge taper ────────────────────────────────────────────────────
+// ─── Edge Taper ────────────────────────────────────────────────────────
 const float EDGE_TAPER = 60.0;    // horizontal fade at screen edges (pixels)
 
-// ─── Prompt detection ──────────────────────────────────────────────
-const int   DETECT_SAMPLES    = 8;     // points sampled right of cursor
-const float DETECT_THRESHOLD  = 0.18;  // luminance below this = "empty" pixel
-const float DETECT_MIN_EMPTY  = 0.55;  // fraction of samples that must be empty
-const float DETECT_FALLBACK   = 0.5;   // confidence when right side is too narrow
-const float DETECT_MIN_SPACE  = 3.0;   // minimum cell widths of space to attempt detection
+// ─── Prompt Detection ──────────────────────────────────────────────────
+const int   DETECT_SAMPLES   = 8;     // points sampled right of cursor
+const float DETECT_THRESHOLD = 0.18;  // luminance below this = "empty" pixel
+const float DETECT_MIN_EMPTY = 0.55;  // fraction of samples that must be empty
+const float DETECT_FALLBACK  = 0.5;   // confidence when right side is too narrow
+const float DETECT_MIN_SPACE = 3.0;   // minimum cell widths of space to attempt detection
 
-// ─── Vertical asymmetry ───────────────────────────────────────────
+// ─── Vertical Asymmetry ────────────────────────────────────────────────
 // Outer haze extends slightly further downward (away from text) than
 // upward (into the cursor row). 1.0 = symmetric, lower = more downward.
 const float ASYM_FACTOR = 0.85;
 
-// ─── Helpers ───────────────────────────────────────────────────────
+// ─── Helpers ───────────────────────────────────────────────────────────
 
 float luminance(vec3 c) {
     return dot(c, vec3(0.2126, 0.7152, 0.0722));
 }
 
-float hash(vec2 p) {
+// Pseudo-random hash — vec2 in, float out.
+float hash21(vec2 p) {
     return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
 }
 
 // Organic shimmer — slow noise variation along the beam.
 // Wraps time to keep hash input small, avoiding float precision loss
-// after hours of uptime. 256 cycles ≈ 102s period, invisible repeat.
+// after hours of uptime. 256 cycles ~ 102s period, invisible repeat.
 float shimmer(vec2 p, float t) {
     vec2 cell = floor(p * 0.08);
-    float n = hash(cell + floor(mod(t * 2.5, 256.0)));
+    float n = hash21(cell + floor(mod(t * 2.5, 256.0)));
     return 0.93 + 0.07 * n;
 }
 
-// ─── Main ──────────────────────────────────────────────────────────
+// ─── Main ──────────────────────────────────────────────────────────────
 
 void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     vec2 uv = fragCoord / iResolution.xy;
@@ -158,12 +164,12 @@ void mainImage(out vec4 fragColor, in vec2 fragCoord) {
     // ── Pulse (dual-frequency lightsaber hum) ──
     // Wrap phases to [0,1) to preserve float precision over hours of uptime.
     float pulse = 1.0
-        + PULSE_AMOUNT * sin(mod(iTime * PULSE_FREQ, 1.0) * 6.2832)
-        + PULSE_AMOUNT * 0.4 * sin(mod(iTime * PULSE_DRIFT, 1.0) * 6.2832 + 2.1);
+        + PULSE_AMOUNT * sin(mod(iTime * PULSE_FREQ, 1.0) * TAU)
+        + PULSE_AMOUNT * 0.4 * sin(mod(iTime * PULSE_DRIFT, 1.0) * TAU + 2.1);
 
     // ── Energy ripple: brightness wave traveling rightward ──
     float ripplePhase = fragCoord.x * RIPPLE_SCALE - mod(iTime * RIPPLE_SPEED, 100.0);
-    float ripple = pow(0.5 + 0.5 * sin(ripplePhase * 6.2832), RIPPLE_SHARPNESS);
+    float ripple = pow(0.5 + 0.5 * sin(ripplePhase * TAU), RIPPLE_SHARPNESS);
     float rippleBoost = 1.0 + RIPPLE_STRENGTH * ripple;
 
     // ── Organic shimmer ──
