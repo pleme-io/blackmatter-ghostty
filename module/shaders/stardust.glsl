@@ -22,15 +22,15 @@ const vec3 STAR_BRIGHT = vec3(0.70, 0.88, 1.00);  // frost ice — twinkle peak
 const vec3 STAR_WARM   = vec3(0.85, 0.87, 0.91);  // SNOW_0 — rare warm flicker
 
 // ─── Stardust Parameters ───────────────────────────────────────────────
-const float STAR_DENSITY    = 0.06;   // probability a cell contains a star (0-1)
-const float STAR_INTENSITY  = 0.035;  // peak additive brightness
-const float STAR_RADIUS     = 1.2;    // core glow radius (pixels)
-const float STAR_SOFTNESS   = 0.8;    // falloff softness (pixels)
-const float CYCLE_BASE      = 4.0;    // minimum lifecycle duration (seconds)
-const float CYCLE_VARIANCE  = 8.0;    // additional random duration per star
-const float TWINKLE_SHARPNESS = 4.0;  // how peaked the brightness curve is
+const float STAR_DENSITY    = 0.09;   // probability a cell contains a star (0-1)
+const float STAR_INTENSITY  = 0.06;   // peak additive brightness
+const float STAR_RADIUS     = 1.5;    // core glow radius (pixels)
+const float STAR_SOFTNESS   = 1.0;    // falloff softness (pixels)
+const float CYCLE_BASE      = 3.5;    // minimum lifecycle duration (seconds)
+const float CYCLE_VARIANCE  = 7.0;    // additional random duration per star
+const float TWINKLE_SHARPNESS = 3.0;  // how peaked the brightness curve is (lower = more visible)
 const float DRIFT_SPEED     = 0.3;    // very slow positional drift (pixels/sec)
-const float GRID_SIZE       = 24.0;   // cell size — controls star spacing
+const float GRID_SIZE       = 20.0;   // cell size — controls star spacing (smaller = denser)
 
 // ─── Background Detection ──────────────────────────────────────────────
 const float BG_THRESHOLD = 0.25;  // stars only appear on darker areas
