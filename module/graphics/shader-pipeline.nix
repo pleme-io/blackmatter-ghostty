@@ -134,6 +134,18 @@ let
         { find = "FROST_TINT       = 0.15";  replace = "FROST_TINT       = 0.80"; }
       ];
     }
+    {
+      name = "stardust";
+      option = "stardust";
+      file = ../shaders/stardust.glsl;
+      layer = "noise";
+      debugParams = [
+        { find = "STAR_DENSITY    = 0.06";  replace = "STAR_DENSITY    = 0.25"; }
+        { find = "STAR_INTENSITY  = 0.035"; replace = "STAR_INTENSITY  = 0.20"; }
+        { find = "STAR_RADIUS     = 1.2";   replace = "STAR_RADIUS     = 2.5"; }
+        { find = "GRID_SIZE       = 24.0";  replace = "GRID_SIZE       = 16.0"; }
+      ];
+    }
   ];
 
   # ── Pipeline builder ────────────────────────────────────────────

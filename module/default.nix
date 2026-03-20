@@ -353,6 +353,11 @@ in {
         default = false;
         description = "Enable expanding ripple ring when cursor arrives at a new position";
       };
+      stardust = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Enable barely perceptible twinkling frost particles on dark areas";
+      };
       debug = mkOption {
         type = types.bool;
         default = false;
