@@ -538,6 +538,10 @@ in {
             window-vsync = cfg.performance.vsync;
             minimum-contrast = cfg.performance.minimumContrast;
           }
+          # Title (override upstream ghost emoji default)
+          {
+            title = "❄";
+          }
           # Behavior
           {
             confirm-close-surface = cfg.behavior.confirmClose;
