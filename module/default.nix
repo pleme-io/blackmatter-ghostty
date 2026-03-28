@@ -63,6 +63,11 @@ with lib; let
       shell-integration-features = concatStringsSep "," cfg.shellIntegration.features;
     })
 
+    # Title (override upstream ghost emoji default)
+    {
+      title = "❄";
+    }
+
     # Behavior
     {
       confirm-close-surface = cfg.behavior.confirmClose;
