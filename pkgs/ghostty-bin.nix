@@ -15,7 +15,11 @@ stdenvNoCC.mkDerivation rec {
   nativeBuildInputs = [ _7zz ];
 
   unpackPhase = ''
-    7zz x "$src" -ocontents
+    # 7zz exits non-zero on "dangerous" relative symlinks in terminfo — ignore
+    7zz x "$src" -ocontents || true
+    # Recreate the symlink 7zz skipped
+    mkdir -p contents/Ghostty/Ghostty.app/Contents/Resources/terminfo/67
+    ln -sf ../78/xterm-ghostty contents/Ghostty/Ghostty.app/Contents/Resources/terminfo/67/ghostty
   '';
 
   sourceRoot = "contents/Ghostty/Ghostty.app";
