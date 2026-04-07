@@ -74,6 +74,66 @@ mkZigSwiftApp {
   buildPhaseOverride = ''
     runHook preBuild
 
+    # Discover Xcode SDK FIRST, then patch for arm64e→arm64 compat,
+    # then run nix-macos env so it sees our patched SDKROOT.
+    if command -v xcrun &>/dev/null; then
+      _realSdk="$(xcrun --show-sdk-path 2>/dev/null)" || true
+    fi
+    if [ -z "''${_realSdk:-}" ]; then
+      _realSdk="/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk"
+    fi
+
+    # Xcode 26+ SDK TBDs list only arm64e-macos, not arm64-macos.
+    # Zig 0.15 targets arm64-macos, so LLD rejects all SDK stubs
+    # (strict target matching). Patch TBDs to include arm64-macos.
+    patchedSdk="$TMPDIR/patched-sdk"
+    mkdir -p "$patchedSdk/usr/lib/system"
+    for tbd in "$_realSdk/usr/lib/libSystem"*.tbd; do
+      sed 's/arm64e-macos/arm64-macos/g; s/arm64e-maccatalyst/arm64-maccatalyst/g' \
+        "$tbd" > "$patchedSdk/usr/lib/$(basename "$tbd")"
+    done
+    for tbd in "$_realSdk/usr/lib/system"/*.tbd; do
+      sed 's/arm64e-macos/arm64-macos/g; s/arm64e-maccatalyst/arm64-maccatalyst/g' \
+        "$tbd" > "$patchedSdk/usr/lib/system/$(basename "$tbd")"
+    done
+    # Symlink everything else from the real SDK so it's a complete sysroot
+    for item in "$_realSdk"/*; do
+      base="$(basename "$item")"
+      [ "$base" = "usr" ] && continue  # we handle usr/ manually
+      ln -sf "$item" "$patchedSdk/$base" 2>/dev/null || true
+    done
+    # Symlink all of usr/ except lib/ (which we patched)
+    mkdir -p "$patchedSdk/usr"
+    for item in "$_realSdk/usr"/*; do
+      base="$(basename "$item")"
+      [ "$base" = "lib" ] && continue
+      ln -sf "$item" "$patchedSdk/usr/$base" 2>/dev/null || true
+    done
+    # Symlink everything in usr/lib/ except what we patched
+    for item in "$_realSdk/usr/lib"/*; do
+      base="$(basename "$item")"
+      [ "$base" = "system" ] && continue
+      echo "$base" | grep -q "^libSystem" && continue
+      ln -sf "$item" "$patchedSdk/usr/lib/$base" 2>/dev/null || true
+    done
+    export SDKROOT="$patchedSdk"
+    echo "  SDKROOT=$SDKROOT (patched arm64e→arm64 TBD targets)"
+
+    # Override xcrun so Zig's native SDK detection returns our patched SDK
+    xcrunWrapper="$TMPDIR/bin"
+    mkdir -p "$xcrunWrapper"
+    cat > "$xcrunWrapper/xcrun" << 'XCRUN_EOF'
+#!/bin/bash
+if [[ "$*" == *"--show-sdk-path"* ]]; then
+  echo "$SDKROOT"
+else
+  /usr/bin/xcrun "$@"
+fi
+XCRUN_EOF
+    chmod +x "$xcrunWrapper/xcrun"
+    # Add Metal compiler + other Xcode toolchain binaries to PATH
+    export PATH="$xcrunWrapper:/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin:$PATH"
+
     eval "$(nix-macos env)"
 
     # --- Platform detection and early error reporting ---
@@ -136,12 +196,16 @@ mkZigSwiftApp {
     export ZIG_GLOBAL_CACHE_DIR="$TMPDIR/.zig-cache"
     export ZIG_LOCAL_CACHE_DIR="$TMPDIR/.zig-cache"
 
+    echo "  (arm64e→arm64 TBD patching done before nix-macos env)"
+
     # Do NOT use --prefix here. xcodebuild's CpResource expects resources
     # at zig-out/share/ (relative to source). --prefix redirects install
     # outputs away from zig-out/, causing CpResource to fail.
     # We copy from zig-out/ and macos/build/ to $out in installPhaseOverride.
     zig build \
       --system ${deps} \
+      --sysroot "$SDKROOT" \
+      --verbose-link \
       -Doptimize=ReleaseFast \
       -Dcpu=baseline \
       -Dxcframework-target=native \

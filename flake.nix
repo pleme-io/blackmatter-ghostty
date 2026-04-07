@@ -123,6 +123,7 @@
         lib.optionalAttrs (prev ? stdenv) (
           (if prev.stdenv.isDarwin then {
             ghostty = self.packages.${prev.stdenv.hostPlatform.system}.ghostty;
+            ghostty-bin = prev.callPackage ./pkgs/ghostty-bin.nix {};
           } else
             ghostty.overlays.default final prev)
           // {
