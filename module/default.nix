@@ -471,13 +471,61 @@ in {
     (mkIf pkgs.stdenv.isLinux {
       home.packages = [pkgs.ghostty];
     })
-    (mkIf pkgs.stdenv.isDarwin {
-      home.packages = [
-        (if cfg.darwin.useSourceBuild
-         then pkgs.ghostty
-         else pkgs.ghostty-bin)
-      ];
-    })
+    (mkIf pkgs.stdenv.isDarwin (let
+      ghosttyPkg =
+        if cfg.darwin.useSourceBuild then pkgs.ghostty else pkgs.ghostty-bin;
+      currentAppPath = "${ghosttyPkg}/Applications/Ghostty.app";
+    in {
+      home.packages = [ ghosttyPkg ];
+
+      # Every blackmatter-ghostty bump produces a new Nix store path.
+      # LaunchServices never evicts prior registrations, so macOS can
+      # resolve "Ghostty" to a stale (possibly garbage-collected or
+      # signature-broken) bundle — which, after TCC binding, surfaces as
+      # "Ghostty.app is damaged and can't be opened". Prune every
+      # Ghostty.app registration that isn't the currently-active store
+      # path, then re-register the current one.
+      home.activation.ghosttyLaunchServices =
+        lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+          lsregister="/System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister"
+          current=${lib.escapeShellArg currentAppPath}
+          hmLink="$HOME/Applications/Home Manager Apps/Ghostty.app"
+
+          if [ ! -x "$lsregister" ] || [ ! -d "$current" ]; then
+            exit 0
+          fi
+
+          stale=$(
+            "$lsregister" -dump 2>/dev/null \
+              | ${pkgs.gawk}/bin/awk '
+                  /^path:[[:space:]]+\// && /\/Applications\/Ghostty\.app[[:space:]]/ {
+                    sub(/^path:[[:space:]]+/, "");
+                    sub(/[[:space:]]+\(0x[0-9a-f]+\)$/, "");
+                    print
+                  }
+                ' \
+              | sort -u \
+              | grep -vxF "$current" || true
+          )
+
+          pruned=0
+          if [ -n "$stale" ]; then
+            while IFS= read -r p; do
+              [ -z "$p" ] && continue
+              if "$lsregister" -u "$p" >/dev/null 2>&1; then
+                pruned=$((pruned + 1))
+              fi
+            done <<< "$stale"
+          fi
+
+          "$lsregister" -f "$current" >/dev/null 2>&1 || true
+          if [ -L "$hmLink" ] || [ -d "$hmLink" ]; then
+            "$lsregister" -f "$hmLink" >/dev/null 2>&1 || true
+          fi
+
+          echo "ghostty: LaunchServices pruned $pruned stale registration(s), re-registered $current"
+        '';
+    }))
 
     # ── Shader file deployment ────────────────────────────────────
     (mkIf cfg.shaders.enable {

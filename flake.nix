@@ -75,7 +75,21 @@
 
       # Shared HM module stubs for check evaluation
       mkHmStubs = pkgs: { lib, ... }: {
-        config._module.args = { inherit pkgs; };
+        config._module.args = {
+          inherit pkgs;
+          # Minimal home-manager lib shim for check evaluation.
+          # Real HM provides these via its module system; we mirror the
+          # shape so module eval tests don't require the full HM pipeline.
+          lib = lib // {
+            hm = (lib.hm or {}) // {
+              dag = (lib.hm.dag or {}) // {
+                entryAfter  = after: data: { inherit after data; before = []; };
+                entryBefore = before: data: { inherit before data; after = []; };
+                entryAnywhere = data: { after = []; before = []; inherit data; };
+              };
+            };
+          };
+        };
         options.home.packages = lib.mkOption {
           type = lib.types.listOf lib.types.package;
           default = [];
@@ -89,6 +103,10 @@
             options.text = lib.mkOption { type = lib.types.str; default = ""; };
             options.source = lib.mkOption { type = lib.types.path; default = ./.; };
           });
+          default = {};
+        };
+        options.home.activation = lib.mkOption {
+          type = lib.types.attrsOf lib.types.anything;
           default = {};
         };
         options.programs.ghostty = lib.mkOption {
