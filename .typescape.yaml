@@ -1,0 +1,26 @@
+schema_version: 1
+manifest:
+  name: blackmatter-ghostty
+  kind: BlackmatterComponent
+  archetype: blackmatter-component-custom-package
+  description: GPU-accelerated terminal (Ghostty) with impure macOS build + Nord theme + HM module.
+  custom_flake: true
+  custom_flake_reason: |
+    Impure Darwin build (__noChroot), custom shim + patches, complex Swift toolchain
+    integration. The shape of its flake doesn't reduce to blackmatter-component-flake.nix.
+dimensions:
+  vocabulary: [ghostty, terminal, gpu, swift, nord, shader]
+  domains: [Nix, Swift, Zig]
+  stack: [HomeManager]
+  modules:
+    home_manager: module/
+  render:
+    produces:
+      - "pkgs.ghostty (Darwin, impure build)"
+      - "~/.config/ghostty/config"
+  compliance:
+    satisfies: []
+    participates: []
+  dag:
+    inputs: [nixpkgs, substrate, blackmatter-macos, blackmatter-zig, dev-tools]
+  attestation: { merkle_root: null, signed_by: null, producer: custom-flake }
