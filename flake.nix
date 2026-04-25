@@ -268,6 +268,74 @@
             touch $out
           '');
 
+          # Verify mode = "performance" (default) flips graphical knobs off
+          # and that explicit user assignments still win over the mode preset.
+          module-mode = let
+            perfDefault = lib.evalModules {
+              modules = [
+                ./module
+                (mkHmStubs pkgs)
+                ({ ... }: {
+                  config.blackmatter.components.ghostty.enable = true;
+                })
+              ];
+            };
+            perfWithOverride = lib.evalModules {
+              modules = [
+                ./module
+                (mkHmStubs pkgs)
+                ({ ... }: {
+                  config.blackmatter.components.ghostty = {
+                    enable = true;
+                    # mode is "performance" by default; user override:
+                    appearance.backgroundOpacity = 0.5;
+                  };
+                })
+              ];
+            };
+            graphical = lib.evalModules {
+              modules = [
+                ./module
+                (mkHmStubs pkgs)
+                ({ ... }: {
+                  config.blackmatter.components.ghostty = {
+                    enable = true;
+                    mode = "graphical";
+                  };
+                })
+              ];
+            };
+            pcfg = perfDefault.config.blackmatter.components.ghostty;
+            ocfg = perfWithOverride.config.blackmatter.components.ghostty;
+            gcfg = graphical.config.blackmatter.components.ghostty;
+          in pkgs.runCommand "ghostty-module-mode" {} ''
+            # Default mode is "performance"
+            test "${pcfg.mode}" = "performance" || (echo "FAIL: default mode" && exit 1)
+
+            # Performance-mode defaults
+            test "${builtins.toJSON pcfg.shaders.enable}" = "false" || exit 1
+            test "${builtins.toJSON pcfg.shaders.animation}" = "false" || exit 1
+            test "${builtins.toJSON pcfg.shaders.bloom}" = "false" || exit 1
+            test "${builtins.toJSON pcfg.appearance.backgroundOpacity}" = "1.0" || exit 1
+            test "${builtins.toJSON pcfg.appearance.backgroundBlurRadius}" = "0" || exit 1
+            test "${builtins.toJSON pcfg.appearance.unfocusedSplitOpacity}" = "1.0" || exit 1
+            test "${builtins.toJSON pcfg.cursor.blink}" = "false" || exit 1
+            test "${builtins.toJSON pcfg.font.thicken}" = "false" || exit 1
+            test "${builtins.toJSON pcfg.behavior.scrollbackLimit}" = "5000" || exit 1
+
+            # User override beats mode preset
+            test "${builtins.toJSON ocfg.appearance.backgroundOpacity}" = "0.5" || exit 1
+
+            # graphical mode preserves visual-rich declared defaults
+            test "${builtins.toJSON gcfg.appearance.backgroundOpacity}" = "0.95" || exit 1
+            test "${builtins.toJSON gcfg.appearance.backgroundBlurRadius}" = "32" || exit 1
+            test "${builtins.toJSON gcfg.cursor.blink}" = "true" || exit 1
+            test "${builtins.toJSON gcfg.font.thicken}" = "true" || exit 1
+
+            echo "module-mode: performance-default + override + graphical all verified"
+            touch $out
+          '';
+
           # Verify shader-enabled module evaluates correctly
           module-shaders = let
             shaderEval = lib.evalModules {

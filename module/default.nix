@@ -113,6 +113,33 @@ in {
   options.blackmatter.components.ghostty = {
     enable = mkEnableOption "Ghostty terminal emulator";
 
+    # ── Mode ──────────────────────────────────────────────────────
+    # Top-level configuration profile. Flips many sub-defaults at once
+    # via `mkDefault`, so individual knobs (shaders, opacity, blur,
+    # cursor blink, font thicken, animation, scrollback) can still be
+    # overridden by user config without touching `mode`.
+    mode = mkOption {
+      type = types.enum [ "performance" "balanced" "graphical" ];
+      default = "performance";
+      description = ''
+        Configuration profile.
+
+        - "performance" (default, fleet-wide): no shaders, no GPU animation,
+          opaque background, no window blur, no cursor blink, no font
+          thickening, smaller scrollback. Lowest GPU/CPU/memory footprint
+          — ideal for laptops, low-power nodes, and headless rebuilds.
+        - "balanced": shaders enabled but with `animation = false`, light
+          transparency (0.97) + small blur (16), other graphical knobs at
+          their declared defaults.
+        - "graphical": all shaders/effects/animations enabled, full
+          transparency, full blur — the legacy visual-rich behavior.
+
+        Individual options (e.g. `shaders.enable`, `appearance.backgroundOpacity`)
+        always win over `mode`. Set `mode = "graphical"` to opt back into
+        the full visual experience without redeclaring each knob.
+      '';
+    };
+
     # ── Font ──────────────────────────────────────────────────────
     font = {
       family = mkOption {
@@ -467,6 +494,38 @@ in {
   # CONFIG
   # ══════════════════════════════════════════════════════════════════
   config = mkIf cfg.enable (mkMerge [
+    # ── Mode-driven sub-option defaults ───────────────────────────
+    # `mkDefault` (priority 1000) wins over the option-level
+    # `default = ...` (priority 1500) but loses to any user assignment
+    # at normal priority (100). So setting `mode` flips the right
+    # knobs without trapping users who set individual knobs themselves.
+    (mkIf (cfg.mode == "performance") {
+      blackmatter.components.ghostty = {
+        shaders.enable                  = mkDefault false;
+        shaders.animation               = mkDefault false;
+        shaders.bloom                   = mkDefault false;
+        shaders.filmGrain               = mkDefault false;
+        shaders.chromaticAberration     = mkDefault false;
+        appearance.backgroundOpacity    = mkDefault 1.0;
+        appearance.backgroundBlurRadius = mkDefault 0;
+        appearance.unfocusedSplitOpacity = mkDefault 1.0;
+        cursor.blink                    = mkDefault false;
+        font.thicken                    = mkDefault false;
+        behavior.scrollbackLimit        = mkDefault 5000;
+        performance.vsync               = mkDefault true;
+      };
+    })
+    (mkIf (cfg.mode == "balanced") {
+      blackmatter.components.ghostty = {
+        shaders.enable                  = mkDefault true;
+        shaders.animation               = mkDefault false;
+        appearance.backgroundOpacity    = mkDefault 0.97;
+        appearance.backgroundBlurRadius = mkDefault 16;
+      };
+    })
+    # "graphical" mode: option-level defaults already encode the
+    # visual-rich preset, so no overrides are needed.
+
     # ── Package installation ──────────────────────────────────────
     (mkIf pkgs.stdenv.isLinux {
       home.packages = [pkgs.ghostty];
