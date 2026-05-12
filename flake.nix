@@ -34,13 +34,22 @@
       url = "github:cachix/devenv";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    # ishou — the typed design system. Source of truth for the Nord
+    # palette this module previously carried locally at
+    # `module/themes/nord/colors.nix`. See
+    # pleme-io/theory/THEME-ARCHITECTURE.md.
+    ishou = {
+      url = "github:pleme-io/ishou";
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.substrate.follows = "substrate";
+    };
     forge = {
       url = "github:pleme-io/forge";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
-  outputs = { self, nixpkgs, ghostty, substrate, blackmatter-macos, blackmatter-zig, workspace-config, dev-tools, devenv, forge }:
+  outputs = { self, nixpkgs, ghostty, substrate, blackmatter-macos, blackmatter-zig, workspace-config, dev-tools, devenv, forge, ishou }:
     let
       lib = nixpkgs.lib;
 
@@ -213,7 +222,11 @@
             ];
           };
 
-          colors = import ./module/themes/nord/colors.nix;
+          # Nord palette sourced from ishou — the typed design system
+          # owns the single fleet copy. The retiring local file is
+          # gone; this `import` reads the build-time-rendered attrset.
+          # See pleme-io/theory/THEME-ARCHITECTURE.md.
+          colors = import ishou.packages.${system}.nord-palette-nix;
         in {
           # Verify module options exist and are well-formed
           module-eval = pkgs.runCommand "ghostty-module-eval" {} ''
