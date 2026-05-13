@@ -6,6 +6,13 @@
 #   theme.nix           — Nord palette mapping and color generation
 #   settings.nix        — unified graphical settings builder
 #   serialize.nix       — attrset → Ghostty config text serializer
+#
+# Factory: outer args inject ishou (the fleet typography source of
+# truth — `pleme-io/ishou/crates/ishou-tokens/src/typography.rs`).
+# Inner is the standard HM module function. This is how ghostty +
+# mado share font choices BY CONSTRUCTION — both read the same
+# typed `fleet-fonts` attrset.
+{ ishou }:
 {
   config,
   lib,
@@ -14,6 +21,26 @@
 }:
 with lib; let
   cfg = config.blackmatter.components.ghostty;
+
+  # ── Fleet typography (ishou source of truth) ─────────────────────
+  # Imported at module-evaluation time. ishou's fleet-fonts artifact
+  # is a build-time rendered Nix attrset with `.name` AND `.package`
+  # for each canonical face slot. Updating fonts = one-line edit in
+  # ishou-tokens; ghostty + mado + every future fleet GUI app
+  # re-rolls automatically on the next rebuild.
+  fleetFonts = import "${ishou.packages.${pkgs.stdenv.hostPlatform.system}.fleet-fonts}"
+    { inherit pkgs; };
+
+  # Font packages this module installs declaratively when ghostty
+  # is enabled. Same packages mado's HM module installs (factored
+  # through ishou so both apps share installation by construction).
+  # Filtered to non-null since emoji is OS-shipped on macOS.
+  fleetFontPackages = lib.filter (p: p != null) [
+    fleetFonts.primary.package
+    fleetFonts.italic.package
+    fleetFonts.bold.package
+    fleetFonts.symbols.package
+  ];
 
   # ── Graphics sub-modules ────────────────────────────────────────
   graphics       = import ./graphics { inherit lib; };
@@ -141,11 +168,26 @@ in {
     };
 
     # ── Font ──────────────────────────────────────────────────────
+    #
+    # Defaults sourced from ishou's `fleet-fonts` artifact (the typed
+    # fleet typography). Operators can override per-host via
+    # `blackmatter.components.ghostty.font.family = "...";` — but
+    # the canonical fleet-wide answer lives in
+    # `pleme-io/ishou/crates/ishou-tokens/src/typography.rs`. mado
+    # reads the same artifact, so changing the canonical font is one
+    # edit and both terminals re-roll in lockstep.
     font = {
       family = mkOption {
         type = types.str;
-        default = "JetBrains Mono";
-        description = "Font family for terminal";
+        default = fleetFonts.primary.name;
+        description = "Primary font family. Default sourced from ishou::fleet-fonts.";
+        example = "JetBrainsMono Nerd Font";
+      };
+      italic = mkOption {
+        type = types.str;
+        default = fleetFonts.italic.name;
+        description = "Italic-face family. Default sourced from ishou::fleet-fonts (calligraphic).";
+        example = "Iosevka";
       };
       size = mkOption {
         type = types.int;
@@ -527,15 +569,20 @@ in {
     # visual-rich preset, so no overrides are needed.
 
     # ── Package installation ──────────────────────────────────────
+    # Also installs the canonical fleet font packages so ghostty's
+    # font-family declaration resolves to actually-installed faces
+    # rather than CoreText fallback. Same packages mado installs
+    # (factored through ishou::fleet-fonts) — both terminals share
+    # font installation by construction.
     (mkIf pkgs.stdenv.isLinux {
-      home.packages = [pkgs.ghostty];
+      home.packages = [pkgs.ghostty] ++ fleetFontPackages;
     })
     (mkIf pkgs.stdenv.isDarwin (let
       ghosttyPkg =
         if cfg.darwin.useSourceBuild then pkgs.ghostty else pkgs.ghostty-bin;
       currentAppPath = "${ghosttyPkg}/Applications/Ghostty.app";
     in {
-      home.packages = [ ghosttyPkg ];
+      home.packages = [ ghosttyPkg ] ++ fleetFontPackages;
 
       # Every blackmatter-ghostty bump produces a new Nix store path.
       # LaunchServices never evicts prior registrations, so macOS can

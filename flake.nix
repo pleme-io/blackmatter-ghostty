@@ -173,7 +173,10 @@
       });
 
       # ── Home-manager module ──────────────────────────────────────
-      homeManagerModules.default = import ./module;
+      # Factory: outer args inject ishou (the fleet typography
+      # source of truth), inner is the standard HM module function.
+      # Matches the blackmatter-anvil / blackmatter-mado pattern.
+      homeManagerModules.default = import ./module { inherit ishou; };
 
       # ── Dev shells ────────────────────────────────────────────────
       devShells = lib.genAttrs allSystems (system: let
